@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { PhCaretRight, PhFileText, PhMagnifyingGlass, PhMusicNote, PhPlus, PhWaveform } from '@phosphor-icons/vue'
+import { PhArrowsClockwise, PhCaretRight, PhFileText, PhMagnifyingGlass, PhMusicNote, PhPlus, PhWaveform } from '@phosphor-icons/vue'
 import { searchSongs } from '@/services/songSearch'
 import type { Song } from '@/domain/song'
 import { useSongsStore } from '@/stores/songs'
@@ -41,6 +41,22 @@ onMounted(() => songsStore.load())
           <PhPlus :size="36" weight="regular" aria-hidden="true" />
         </AppButton>
       </header>
+      <div class="library-sync">
+        <button
+          class="library-sync__button"
+          type="button"
+          :disabled="songsStore.isSyncing"
+          @click="songsStore.refresh().catch(() => undefined)"
+        >
+          <PhArrowsClockwise :size="19" weight="bold" :class="{ 'library-sync__icon--spinning': songsStore.isSyncing }" aria-hidden="true" />
+          {{ songsStore.isSyncing ? 'Обновляем библиотеку' : 'Обновить библиотеку' }}
+        </button>
+        <p class="library-sync__status" role="status">
+          <span v-if="songsStore.meta">Обновлено {{ new Date(songsStore.meta.updatedAt).toLocaleString('ru') }}</span>
+          <span v-if="songsStore.syncError">{{ songsStore.syncError }}</span>
+          <span v-if="!songsStore.online">Для сохранения требуется интернет</span>
+        </p>
+      </div>
 
       <label class="library-search">
         <PhMagnifyingGlass :size="31" weight="regular" aria-hidden="true" />
