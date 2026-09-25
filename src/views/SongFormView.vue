@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSongsStore } from '@/stores/songs'
 import { PhArrowLeft, PhDotsThreeVertical, PhPlus, PhX } from '@phosphor-icons/vue'
@@ -94,8 +94,20 @@ async function chooseFiles(event: Event): Promise<void> {
   await addFiles(Array.from(input.files ?? [])); input.value = ''
 }
 function openFilePicker(): void { fileInput.value?.click() }
+function handlePaste(event: ClipboardEvent): void {
+  const target = event.target
+  if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, [contenteditable="true"], [role="textbox"]'))) return
+  const files = Array.from(event.clipboardData?.files ?? [])
+  if (!files.length) return
+  event.preventDefault()
+  void addFiles(files)
+}
 function goBack(): void { void router.push(isEdit.value && song.value ? `/songs/${song.value.id}` : '/') }
-onMounted(load)
+onMounted(() => {
+  window.addEventListener('paste', handlePaste)
+  void load()
+})
+onUnmounted(() => window.removeEventListener('paste', handlePaste))
 </script>
 
 <template>
