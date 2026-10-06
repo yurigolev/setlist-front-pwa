@@ -8,6 +8,9 @@ export interface Attachment {
   mimeType: string
   fileKey: string
   createdAt: string
+  byteSize?: number
+  checksum?: string
+  contentUrl?: string
 }
 
 export interface Song {
@@ -18,6 +21,7 @@ export interface Song {
   attachments: Attachment[]
   createdAt: string
   updatedAt: string
+  revision?: number
 }
 
 export interface NewSong {

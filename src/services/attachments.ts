@@ -13,7 +13,10 @@ export function attachmentKind(file: File): AttachmentKind | undefined {
 }
 
 export function attachmentValidationMessage(file: File): string | undefined {
-  if (attachmentKind(file)) return undefined
+  const kind = attachmentKind(file)
+  if (kind && file.size === 0) return `«${file.name}» пустой файл.`
+  if (kind && file.size > (kind === 'audio' ? 50 : 10) * 1024 * 1024) return `«${file.name}» превышает допустимый размер.`
+  if (kind) return undefined
   return `«${file.name}» не добавлен: поддерживаются PNG, JPEG, WebP и MP3.`
 }
 

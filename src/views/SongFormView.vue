@@ -9,8 +9,9 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AppField from '@/components/ui/AppField.vue'
 import AttachmentList from '@/components/AttachmentList.vue'
 import type { Attachment, Song } from '@/domain/song'
-import { IndexedDbAttachmentFileRepository } from '@/repositories/attachmentFileRepository'
 import { attachmentKind, attachmentValidationMessage } from '@/services/attachments'
+import { createUuid } from '@/services/uuid'
+import { ApiError, UnknownResultError, checkAttachment } from '@/services/libraryApi'
 
 const props = defineProps<{ id?: string }>()
 const songsStore = useSongsStore()
@@ -25,13 +26,18 @@ const fileInput = ref<HTMLInputElement>()
 const attachmentMessages = ref<string[]>([])
 const isEdit = computed(() => Boolean(props.id))
 const removedIds = ref<string[]>([])
-const pendingFiles = ref<{ file: File; url?: string }[]>([])
+const pendingFiles = ref<{ file: File; id: string; revision?: number; url?: string }[]>([])
+const createKey = ref(createUuid())
+const partialSuccess = ref(false)
+const textSaved = ref(false)
+const retryText = ref(false)
 const visibleAttachments = computed(() => song.value?.attachments.filter((item) => !removedIds.value.includes(item.id)) ?? [])
 
 onBeforeUnmount(() => pendingFiles.value.forEach(({ url }) => { if (url) URL.revokeObjectURL(url) }))
 
 async function load(): Promise<void> {
   if (!props.id) return
+  if (!songsStore.songs.length) await songsStore.load()
   song.value = await songsStore.get(props.id)
   if (!song.value) { await router.replace('/'); return }
   title.value = song.value.title
@@ -41,23 +47,32 @@ async function load(): Promise<void> {
 
 async function save(): Promise<void> {
   error.value = ''
-  if (!title.value.trim()) { error.value = 'Укажите название песни.'; return }
+  if (!title.value.trim() || !artist.value.trim()) { error.value = 'Укажите название и исполнителя.'; return }
+  if (!songsStore.online) { error.value = 'Для сохранения требуется интернет'; return }
+  if (!textSaved.value) {
+    for (const { file } of pendingFiles.value) {
+      try { await checkAttachment(file) }
+      catch (cause) { error.value = cause instanceof Error ? cause.message : 'Файл не прошёл проверку'; return }
+    }
+  }
   isSaving.value = true
   try {
-    let savedSong = isEdit.value && song.value
-      ? await songsStore.update({ ...song.value, title: title.value, artist: artist.value, content: content.value, attachments: visibleAttachments.value })
-      : await songsStore.create({ title: title.value, artist: artist.value, content: content.value })
-    if (song.value && removedIds.value.length) {
-      const files = new IndexedDbAttachmentFileRepository()
-      await Promise.all(song.value.attachments.filter((item) => removedIds.value.includes(item.id)).map((item) => files.remove(item.fileKey).catch((cause) => {
-        console.warn('Не удалось очистить файл удалённого вложения', cause)
-      })))
-    }
+    let savedSong = textSaved.value && song.value ? song.value : isEdit.value && song.value
+      ? await songsStore.update({ ...song.value, title: title.value, artist: artist.value, content: content.value })
+      : await songsStore.create({ title: title.value, artist: artist.value, content: content.value }, createKey.value)
+    partialSuccess.value = true
+    textSaved.value = true
+    retryText.value = false
     song.value = savedSong
-    removedIds.value = []
+    while (removedIds.value.length) {
+      savedSong = await songsStore.removeAttachment(savedSong, removedIds.value[0])
+      song.value = savedSong
+      removedIds.value.shift()
+    }
     while (pendingFiles.value.length) {
       const item = pendingFiles.value[0]
-      savedSong = await songsStore.addAttachment(savedSong, item.file)
+      item.revision ??= savedSong.revision
+      savedSong = await songsStore.addAttachment(savedSong, item.file, item.id, item.revision)
       song.value = savedSong
       if (item.url) URL.revokeObjectURL(item.url)
       pendingFiles.value.shift()
@@ -65,11 +80,21 @@ async function save(): Promise<void> {
     await router.replace(`/songs/${savedSong.id}`)
   } catch (cause) {
     console.error('Не удалось сохранить песню', cause)
-    error.value = 'Не удалось сохранить песню. Повторите попытку.'
+    if (cause instanceof ApiError && cause.status === 409) {
+      if (props.id) song.value = await songsStore.get(props.id)
+      error.value = 'Конфликт правок. Библиотека обновлена; проверьте изменения перед повтором.'
+    } else if (cause instanceof UnknownResultError && !partialSuccess.value) { retryText.value = true; error.value = 'Ответ сервера потерян. Проверьте актуальный снимок; повторите текст с прежним ключом.' }
+    else if (cause instanceof UnknownResultError) error.value = 'Ответ сервера потерян. Проверьте актуальный снимок и повторите оставшийся шаг с тем же UUID.'
+    else error.value = partialSuccess.value ? 'Текст сохранён, но изменения файлов завершились с ошибкой. Повторите оставшиеся файлы.' : (cause instanceof Error ? cause.message : 'Не удалось сохранить песню.')
+    if (partialSuccess.value) {
+      try {
+        await songsStore.refresh()
+        if (song.value) song.value = await songsStore.get(song.value.id) ?? song.value
+      } catch { /* сообщение о результате записи остаётся видимым */ }
+    }
   } finally { isSaving.value = false }
 }
 async function addFiles(files: File[]): Promise<void> {
-  if (!song.value) return
   attachmentMessages.value = []
   for (const file of files) {
     const validation = attachmentValidationMessage(file)
@@ -78,7 +103,7 @@ async function addFiles(files: File[]): Promise<void> {
       attachmentMessages.value.push('Для песни можно добавить только один MP3-плейбэк.')
       continue
     }
-    pendingFiles.value.push({ file, url: attachmentKind(file) === 'image' ? URL.createObjectURL(file) : undefined })
+    pendingFiles.value.push({ file, id: createUuid(), url: attachmentKind(file) === 'image' ? URL.createObjectURL(file) : undefined })
   }
 }
 async function removeFile(attachment: Attachment): Promise<void> {
@@ -93,7 +118,6 @@ async function chooseFiles(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement
   await addFiles(Array.from(input.files ?? [])); input.value = ''
 }
-function openFilePicker(): void { fileInput.value?.click() }
 function handlePaste(event: ClipboardEvent): void {
   const target = event.target
   if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, [contenteditable="true"], [role="textbox"]'))) return
@@ -102,6 +126,7 @@ function handlePaste(event: ClipboardEvent): void {
   event.preventDefault()
   void addFiles(files)
 }
+function openFilePicker(): void { fileInput.value?.click() }
 function goBack(): void { void router.push(isEdit.value && song.value ? `/songs/${song.value.id}` : '/') }
 onMounted(() => {
   window.addEventListener('paste', handlePaste)
@@ -127,11 +152,11 @@ onUnmounted(() => window.removeEventListener('paste', handlePaste))
       <form novalidate @submit.prevent="save">
         <div class="form-list">
           <AppField id="song-title" v-model="title" label="Название" :invalid="Boolean(error)" required />
-          <AppField id="song-artist" v-model="artist" label="Исполнитель" />
+          <AppField id="song-artist" v-model="artist" label="Исполнитель" required />
           <AppField id="song-content" v-model="content" label="Заметки" :multiline="true" :rows="14" />
         </div>
         <p v-if="error" class="form-error" role="alert">{{ error }}</p>
-        <section v-if="isEdit" class="edit-attachments" aria-labelledby="edit-attachments-heading">
+        <section class="edit-attachments" aria-labelledby="edit-attachments-heading">
           <h2 id="edit-attachments-heading">Вложения</h2>
           <div class="edit-attachments__grid">
             <AttachmentList v-if="song && visibleAttachments.length" mode="edit" :attachments="visibleAttachments" @remove="removeFile" />
@@ -147,7 +172,8 @@ onUnmounted(() => window.removeEventListener('paste', handlePaste))
           <input ref="fileInput" class="file-input" type="file" accept="image/png,image/jpeg,image/webp,audio/mpeg,.mp3" multiple @change="chooseFiles" />
           <p v-for="message in attachmentMessages" :key="message" class="form-error" role="alert">{{ message }}</p>
         </section>
-        <AppButton type="submit" :disabled="isSaving">{{ isSaving ? 'Сохраняем…' : (isEdit ? 'Сохранить изменения' : 'Сохранить песню') }}</AppButton>
+        <AppButton type="submit" :disabled="isSaving || !songsStore.online">{{ isSaving ? 'Сохраняем…' : retryText ? 'Повторить текст' : (isEdit ? 'Сохранить изменения' : 'Сохранить песню') }}</AppButton>
+        <p v-if="!songsStore.online" class="form-error">Для сохранения требуется интернет</p>
       </form>
       </template>
     </div>

@@ -1,49 +1,44 @@
 import 'fake-indexeddb/auto'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { reactive } from 'vue'
-
 import { useSongsStore } from './songs'
-import { IndexedDbAttachmentFileRepository } from '@/repositories/attachmentFileRepository'
 
-afterEach(() => {
-  indexedDB.deleteDatabase('setlist-library')
+const id = '11111111-1111-4111-8111-111111111111'
+const libraryId = '22222222-2222-4222-8222-222222222222'
+const serverSong = { id, title: 'Песня', artist: 'Артист', notes: 'Текст', revision: 1, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', attachments: [] }
+let serverSongs: typeof serverSong[]
+let calls: Array<{ path: string; options?: RequestInit }>
+beforeEach(() => {
+  setActivePinia(createPinia())
+  serverSongs = []
+  calls = []
+  vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
+    calls.push({ path: url, options })
+    if (url.endsWith('/v1/library/snapshot')) return Response.json({ libraryId, libraryRevision: 1, songs: serverSongs })
+    if (url.endsWith('/v1/songs') && options?.method === 'POST') { serverSongs = [serverSong]; return Response.json(serverSong) }
+    return Response.json({ code: 'NOT_FOUND', message: 'Not found', requestId: id }, { status: 404 })
+  }))
 })
+afterEach(() => { vi.unstubAllGlobals(); indexedDB.deleteDatabase('setlist-library') })
 
-describe('пакетная загрузка вложений', () => {
-  it('сохраняет несколько PNG из реактивной карточки без ошибки structured clone', async () => {
-    setActivePinia(createPinia())
-    const songs = useSongsStore()
-    const song = reactive(await songs.create({ title: 'Проверка PNG' }))
-
-    const withFirstImage = await songs.addAttachment(song, new File(['first'], 'first.png', { type: 'image/png' }))
-    const withSecondImage = await songs.addAttachment(reactive(withFirstImage), new File(['second'], 'second.png', { type: 'image/png' }))
-
-    expect(withSecondImage.attachments).toHaveLength(2)
-    await expect(songs.get(withSecondImage.id)).resolves.toMatchObject({ attachments: expect.arrayContaining([
-      expect.objectContaining({ name: 'first.png' }),
-      expect.objectContaining({ name: 'second.png' }),
-    ]) })
+describe('серверная библиотека', () => {
+  it('передаёт notes и стабильный ключ, затем читает подтверждённый снимок', async () => {
+    const store = useSongsStore()
+    const saved = await store.create({ title: 'Песня', artist: 'Артист', content: 'Текст' }, id)
+    expect(saved.content).toBe('Текст')
+    expect(store.songs).toHaveLength(1)
+    const post = calls.find((call) => call.options?.method === 'POST')!
+    expect(post.options?.headers).toMatchObject({ 'Idempotency-Key': id })
+    expect(JSON.parse(String(post.options?.body))).toEqual({ title: 'Песня', artist: 'Артист', notes: 'Текст' })
   })
-
-  it('сохраняет изображение и MP3 отдельно от карточки и восстанавливает их после нового чтения', async () => {
-    setActivePinia(createPinia())
-    const songs = useSongsStore()
-    const song = await songs.create({ title: 'Проверка медиа' })
-
-    const withImage = await songs.addAttachment(song, new File(['image bytes'], 'chords.png', { type: 'image/png' }))
-    const withMedia = await songs.addAttachment(withImage, new File(['audio bytes'], 'playback.mp3', { type: 'audio/mpeg' }))
-    const restored = await songs.get(withMedia.id)
-
-    expect(restored?.attachments).toHaveLength(2)
-    expect(restored?.attachments.map((attachment) => attachment.kind)).toEqual(['image', 'audio'])
-    const files = new IndexedDbAttachmentFileRepository()
-    const savedImage = await files.get(restored!.attachments[0].fileKey)
-    const savedAudio = await files.get(restored!.attachments[1].fileKey)
-    // fake-indexeddb serializes jsdom Blob as an opaque object, so here we
-    // verify that both independent file records survive a fresh DB read.
-    expect(savedImage).toBeDefined()
-    expect(savedAudio).toBeDefined()
+  it('не отправляет старые локальные записи на сервер при загрузке', async () => {
+    const store = useSongsStore()
+    await store.load()
+    expect(store.songs).toEqual([])
+    expect(calls.map((call) => call.path)).toEqual(['/v1/library/snapshot'])
   })
-
+  it('требует исполнителя до запроса', async () => {
+    await expect(useSongsStore().create({ title: 'Песня' })).rejects.toThrow('исполнителя')
+    expect(calls).toEqual([])
+  })
 })

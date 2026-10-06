@@ -85,6 +85,14 @@ openspec/         спецификация и план MVP
 
 ## Подключение Git-репозитория
 
-Каталог пока не является Git-репозиторием. Перед первой публикацией проверьте сборку, создайте репозиторий в GitLab/GitHub и передайте его URL. Затем можно инициализировать Git, добавить remote и создать рабочую ветку по принятым правилам команды.
+Репозиторий: [yurigolev/setlist-front-pwa](https://github.com/yurigolev/setlist-front-pwa). Основная ветка — `main`.
 
 Не добавляйте в репозиторий `node_modules`, сборочные артефакты, локальные настройки IDE и временные файлы туннеля — они уже исключены в `.gitignore`.
+
+## Подключение к backend
+
+Для локальной разработки скопируйте `.env.example` в `.env.local`: `VITE_API_BASE_URL` указывает на API и настраивает Vite proxy для `/v1`. Production PWA запускается в Docker через `docker compose --env-file .env.container up -d --build`; Nginx проксирует API на Mac и сохраняет единый origin. Для туннеля и подключения iPhone по USB следуйте [TUNNEL.md](TUNNEL.md). Сервисный работник кэширует оболочку приложения, а подтверждённый снимок с файлами хранится в IndexedDB. Старые локальные тестовые песни не отправляются на сервер.
+
+## Деплой на VPS
+
+GitHub Actions проверяет каждый Pull Request. Push в `main` запускает тесты, сборку Docker-образа в GHCR и деплой через SSH. Повторный запуск доступен через `Actions → Frontend → Run workflow` для `main`. Настройки и ограничения: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

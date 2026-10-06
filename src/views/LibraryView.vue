@@ -37,7 +37,7 @@ onMounted(() => songsStore.load())
     <div class="library-page__body">
       <header class="library-page__header">
         <div class="library-page__title"><h1>Песни</h1><p>Моя музыка. Всегда с тобой.</p></div>
-        <AppButton class="add-song-button" variant="icon" aria-label="Добавить песню" @click="openNewSong">
+        <AppButton class="add-song-button" variant="icon" aria-label="Добавить песню" :disabled="!songsStore.online" @click="openNewSong">
           <PhPlus :size="36" weight="regular" aria-hidden="true" />
         </AppButton>
       </header>

@@ -3,14 +3,19 @@ import { fileURLToPath, URL } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import vue from '@vitejs/plugin-vue'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const backendTarget = loadEnv(mode, process.cwd(), 'VITE_').VITE_API_BASE_URL
+  return {
+  envPrefix: 'VITE_',
   server: {
     allowedHosts: ['.trycloudflare.com'],
+    proxy: backendTarget ? { '/v1': { target: backendTarget, changeOrigin: true } } : undefined,
   },
   preview: {
     allowedHosts: ['.trycloudflare.com'],
+    proxy: backendTarget ? { '/v1': { target: backendTarget, changeOrigin: true } } : undefined,
   },
   plugins: [
     vue(),
@@ -56,4 +61,5 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  }
 })

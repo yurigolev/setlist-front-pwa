@@ -1,0 +1,14 @@
+node_modules
+.git
+.env
+.env.*
+!.env.container.example
+!.env.example
+dist
+.playwright-cli
+.serena
+.agents
+.idea
+.github
+docs
+openspec

@@ -1,4 +1,5 @@
 import { openSetlistDatabase } from './database'
+import { readServerFile } from './serverSnapshotRepository'
 
 export interface AttachmentFileRepository {
   save(fileKey: string, file: Blob): Promise<void>
@@ -17,6 +18,7 @@ export class IndexedDbAttachmentFileRepository implements AttachmentFileReposito
   }
 
   async get(fileKey: string): Promise<Blob | undefined> {
+    if (fileKey.startsWith('server:')) return readServerFile(fileKey)
     const database = await openSetlistDatabase()
     try {
       return await database.get('files', fileKey)
