@@ -70,6 +70,7 @@ jobs:
     steps:
       - name: Deploy tested image over SSH
         env:
+          GH_TOKEN: ${{ github.token }}
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_USER: ${{ vars.DEPLOY_USER }}
           DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
@@ -79,6 +80,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          latest=$(gh api repos/yurigolev/setlist-front-pwa/git/ref/heads/main --jq '.object.sha')
+          if [[ "$latest" != "$RELEASE_SHA" ]]; then
+            echo 'A newer main commit exists; deployment skipped.'
+            exit 0
+          fi
           : "${DEPLOY_HOST:?Set DEPLOY_HOST repository variable}"
           : "${DEPLOY_USER:?Set DEPLOY_USER repository variable}"
           : "${DEPLOY_SSH_KEY:?Set DEPLOY_SSH_KEY repository secret}"
