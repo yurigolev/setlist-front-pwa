@@ -1,6 +1,7 @@
 import type { Song } from '@/domain/song'
 import { openSetlistDatabase } from './database'
 import { downloadAttachment, type LibrarySnapshot } from '@/services/libraryApi'
+import { sha256Hex } from '@/services/checksum'
 
 export interface SnapshotMeta { libraryId: string; libraryRevision: number; updatedAt: string; source: 'server'; complete: true }
 export async function readSnapshot(): Promise<{ songs: Song[]; meta?: SnapshotMeta }> {
@@ -18,8 +19,7 @@ export async function readServerFile(key: string): Promise<Blob | undefined> {
 async function verifiedBytes(blob: Blob, size: number, checksum: string): Promise<ArrayBuffer> {
   if (blob.size !== size) throw new Error('Размер файла не совпадает со снимком')
   const data = await blob.arrayBuffer()
-  const digest = await crypto.subtle.digest('SHA-256', data)
-  const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  const hex = await sha256Hex(data)
   if (hex !== checksum) throw new Error('Контрольная сумма файла не совпадает со снимком')
   return data
 }

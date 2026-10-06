@@ -7,7 +7,7 @@ import * as api from '@/services/libraryApi'
 const libraryId = '22222222-2222-4222-8222-222222222222'
 const songId = '11111111-1111-4111-8111-111111111111'
 const song = { id: songId, title: 'Подтверждена', artist: 'Автор', content: '', revision: 1, attachments: [], createdAt: '', updatedAt: '' }
-afterEach(() => { vi.restoreAllMocks(); indexedDB.deleteDatabase('setlist-library') })
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); indexedDB.deleteDatabase('setlist-library') })
 describe('снимок IndexedDB', () => {
   it('не смешивает старую локальную базу с серверным снимком', async () => {
     const db = await openSetlistDatabase()
@@ -24,6 +24,7 @@ describe('снимок IndexedDB', () => {
     expect(await readSnapshot()).toMatchObject({ songs: [{ attachments: [] }], meta: { libraryRevision: 1, complete: true } })
   })
   it('сохраняет серверный файл в IndexedDB как байты и возвращает Blob для просмотра', async () => {
+    vi.stubGlobal('crypto', {}) // Public HTTP origin: Web Crypto is unavailable.
     const attachment = { id: '33333333-3333-4333-8333-333333333333', songId, kind: 'image' as const, name: 'a.png', mimeType: 'image/png', fileKey: 'server:33333333-3333-4333-8333-333333333333:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824', byteSize: 5, checksum: '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824', contentUrl: '/v1/attachments/33333333-3333-4333-8333-333333333333/content', createdAt: '' }
     vi.spyOn(api, 'downloadAttachment').mockResolvedValue(new Blob(['hello'], { type: 'image/png' }))
     await publishSnapshot({ libraryId, libraryRevision: 2, songs: [{ ...song, attachments: [attachment] }] })
@@ -38,6 +39,15 @@ describe('снимок IndexedDB', () => {
     await publishSnapshot({ libraryId, libraryRevision: 1, songs: [song] })
     await publishSnapshot({ libraryId, libraryRevision: 2, songs: [] })
     expect(await readSnapshot()).toMatchObject({ songs: [], meta: { libraryRevision: 2 } })
+  })
+  it('отклоняет повреждённый файл на HTTP и сохраняет предыдущий снимок', async () => {
+    await publishSnapshot({ libraryId, libraryRevision: 1, songs: [song] })
+    vi.stubGlobal('crypto', {})
+    const attachment = { id: '33333333-3333-4333-8333-333333333333', songId, kind: 'image' as const, name: 'a.png', mimeType: 'image/png', fileKey: 'server:corrupt-file', byteSize: 5, checksum: 'a'.repeat(64), contentUrl: '/v1/attachments/33333333-3333-4333-8333-333333333333/content', createdAt: '' }
+    vi.spyOn(api, 'downloadAttachment').mockResolvedValue(new Blob(['hello'], { type: 'image/png' }))
+    await expect(publishSnapshot({ libraryId, libraryRevision: 2, songs: [{ ...song, attachments: [attachment] }] })).rejects.toThrow('Контрольная сумма файла не совпадает со снимком')
+    expect(await readSnapshot()).toMatchObject({ songs: [{ attachments: [] }], meta: { libraryRevision: 1 } })
+    expect(await readServerFile(attachment.fileKey)).toBeUndefined()
   })
   it('откатывает публикацию при ошибке квоты IndexedDB', async () => {
     await publishSnapshot({ libraryId, libraryRevision: 1, songs: [song] })
