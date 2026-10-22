@@ -1,0 +1,325 @@
+/* Persistent application frame. Page content owns its controls, not navigation. */
+.app-layout {
+  --page-width: 760px;
+  --page-gutter: 20px;
+  min-height: 100dvh;
+  overflow-x: clip;
+  padding-top: var(--safe-area-top);
+  background: var(--background);
+}
+.app-layout__content {
+  min-height: calc(100dvh - 90px);
+}
+.app-layout .session-header {
+  width: min(100%, var(--page-width));
+  padding: 14px var(--page-gutter) 0;
+}
+.app-layout .app-page,
+.app-layout .library-page {
+  min-height: 0;
+  padding-top: 0;
+}
+.app-layout .library-page__body,
+.app-layout .setlists-content,
+.app-layout .settings-shell,
+.app-layout .page-content {
+  width: min(calc(100% - var(--page-gutter) * 2), var(--page-width));
+  margin-inline: auto;
+  padding-inline: 0;
+}
+.app-layout .library-page__body,
+.app-layout .setlists-content,
+.app-layout .settings-shell {
+  padding-top: 24px;
+}
+.app-layout .app-header,
+.app-layout .song-toolbar {
+  width: min(calc(100% - var(--page-gutter) * 2), var(--page-width));
+  margin-inline: auto;
+}
+.app-layout .app-header {
+  display: flex;
+  border: 0;
+}
+.app-layout .profile-page {
+  width: min(calc(100% - var(--page-gutter) * 2), var(--page-width));
+  min-height: 0;
+  padding: 24px 0 calc(124px + env(safe-area-inset-bottom));
+}
+.app-layout--public .app-layout__content {
+  min-height: 100dvh;
+}
+.app-layout .library-tabs button {
+  transition:
+    color 0.18s ease,
+    background-color 0.18s ease;
+}
+.app-layout .library-tabs button.is-active {
+  background: rgba(73, 102, 168, 0.2);
+}
+.route-page {
+  position: relative;
+}
+/* Relative offsets keep fixed audio/gallery controls attached to the viewport. */
+.page-fade-enter-active,
+.page-forward-enter-active,
+.page-back-enter-active {
+  transition:
+    opacity 0.16s ease-out,
+    left 0.16s ease-out,
+    top 0.16s ease-out;
+}
+.page-fade-leave-active,
+.page-forward-leave-active,
+.page-back-leave-active {
+  transition: opacity 0.09s ease-in;
+  pointer-events: none;
+}
+.page-fade-enter-from {
+  opacity: 0;
+  top: 6px;
+}
+.page-fade-enter-to {
+  opacity: 1;
+  top: 0;
+}
+.page-forward-enter-from {
+  opacity: 0;
+  left: 14px;
+}
+.page-back-enter-from {
+  opacity: 0;
+  left: -14px;
+}
+.page-forward-enter-to,
+.page-back-enter-to {
+  opacity: 1;
+  left: 0;
+}
+.page-fade-leave-to,
+.page-forward-leave-to,
+.page-back-leave-to {
+  opacity: 0;
+}
+@media (max-width: 380px) {
+  .app-layout {
+    --page-gutter: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .route-page,
+  .app-layout .library-tabs button {
+    transition: none !important;
+  }
+  .route-page {
+    left: 0 !important;
+    top: 0 !important;
+  }
+}
+
+/* Layout owns one page heading; pages supply reactive content via PageHeader. */
+.layout-header {
+  width: min(calc(100% - var(--page-gutter) * 2), var(--page-width));
+  margin: 0 auto;
+  padding-top: 22px;
+}
+.layout-header__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+#layout-page-heading {
+  flex: 1;
+  min-width: 0;
+}
+.layout-header .page-header {
+  width: 100%;
+  margin: 0;
+}
+.app-layout .layout-header .session-header {
+  width: auto;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  min-height: 56px;
+  margin: 0;
+  padding: 4px 0 0;
+  align-items: flex-start;
+}
+.layout-header .session-profile {
+  gap: 8px;
+  padding: 4px 0;
+  border-radius: 10px;
+}
+.layout-header .session-profile > svg {
+  display: none;
+}
+.layout-header .session-profile__copy strong {
+  max-width: 130px;
+  font-size: 0.88rem;
+}
+.layout-header .session-profile__copy > span {
+  font-size: 0.7rem;
+}
+.layout-header .user-avatar {
+  width: 36px;
+  height: 36px;
+}
+.layout-header .profile-identity {
+  padding-block: 8px;
+}
+.layout-header .profile-identity .user-avatar {
+  width: 56px;
+  height: 56px;
+}
+.layout-header .profile-identity h1 {
+  margin: 0;
+  font-size: 1.8rem;
+  letter-spacing: -0.04em;
+}
+.layout-header--public {
+  padding-top: 40px;
+}
+.library-header-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 2px;
+}
+.library-header-context__copy {
+  min-width: 0;
+}
+.library-setlist {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--foreground);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+.library-setlist > span {
+  color: var(--muted-strong);
+  flex-shrink: 0;
+}
+.library-setlist strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.library-setlist svg {
+  flex-shrink: 0;
+}
+.library-sync-info {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.library-header-refresh {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  color: var(--foreground);
+  background: transparent;
+}
+.library-header-refresh:hover {
+  background: var(--surface-raised);
+}
+.library-header-refresh:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.library-setlist:focus-visible,
+.library-header-refresh:focus-visible,
+.library-add-song:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 3px;
+}
+.library-search-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.app-layout .library-search-row .library-search {
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  padding-inline: 14px;
+  gap: 10px;
+  border-radius: 12px;
+}
+.library-search-row .library-search input {
+  font-size: 1rem;
+}
+.library-search-row .library-search > svg {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.app-layout .library-add-song {
+  flex: 0 0 52px;
+  width: 52px;
+  height: 52px;
+  min-height: 52px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--primary-foreground);
+  background: var(--primary);
+  box-shadow: none;
+}
+.app-layout .library-controls {
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 14px;
+}
+.app-layout .library-controls .library-filter {
+  min-height: 44px;
+  font-size: 0.88rem;
+  padding-inline: 10px;
+}
+.app-layout .library-controls .sort-switcher {
+  gap: 16px;
+}
+.app-layout .library-controls .sort-switcher button {
+  font-size: 0.88rem;
+}
+@media (max-width: 600px) {
+  .layout-header--with-back .session-header {
+    display: none;
+  }
+}
+@media (max-width: 380px) {
+  .layout-header__row {
+    gap: 8px;
+  }
+  .layout-header .session-profile__copy {
+    display: none;
+  }
+  .library-setlist {
+    flex-wrap: wrap;
+    column-gap: 6px;
+  }
+  .library-setlist > span {
+    flex-basis: 100%;
+    font-size: 0.75rem;
+  }
+  .app-layout .library-controls .sort-switcher {
+    gap: 12px;
+  }
+  .app-layout .library-controls .library-filter {
+    padding-inline: 8px;
+  }
+}
+
+.app-layout .library-page__body {
+  padding-top: 16px;
+}

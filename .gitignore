@@ -17,6 +17,7 @@ dev-dist/
 .serena/
 .omx/
 .playwright-cli/
+.playwright-mcp/
 
 # IDE and OS files
 .idea/
