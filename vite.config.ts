@@ -1,65 +1,69 @@
-import { fileURLToPath, URL } from 'node:url'
+import { fileURLToPath, URL } from 'node:url';
 
-import tailwindcss from '@tailwindcss/vite'
-import { VitePWA } from 'vite-plugin-pwa'
-import vue from '@vitejs/plugin-vue'
-import { defineConfig, loadEnv } from 'vite'
+import tailwindcss from '@tailwindcss/vite';
+import { VitePWA } from 'vite-plugin-pwa';
+import vue from '@vitejs/plugin-vue';
+import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
-  const backendTarget = loadEnv(mode, process.cwd(), 'VITE_').VITE_API_BASE_URL
+  const environment = loadEnv(mode, process.cwd(), 'VITE_');
+  const backendTarget = environment.VITE_API_PROXY_TARGET || environment.VITE_API_BASE_URL;
   return {
-  envPrefix: 'VITE_',
-  server: {
-    allowedHosts: ['.trycloudflare.com'],
-    proxy: backendTarget ? { '/v1': { target: backendTarget, changeOrigin: true } } : undefined,
-  },
-  preview: {
-    allowedHosts: ['.trycloudflare.com'],
-    proxy: backendTarget ? { '/v1': { target: backendTarget, changeOrigin: true } } : undefined,
-  },
-  plugins: [
-    vue(),
-    tailwindcss(),
-    {
-      // Старый production worker был зарегистрирован по /sw.js. При запуске
-      // через Vite он должен получить рабочее обновление, а не HTML fallback.
-      name: 'dev-service-worker-recovery',
-      apply: 'serve',
-      configureServer(server) {
-        server.middlewares.use('/sw.js', (_request, response) => {
-          response.statusCode = 200
-          response.setHeader('Content-Type', 'application/javascript; charset=utf-8')
-          response.setHeader('Cache-Control', 'no-store')
-          response.end("self.addEventListener('install', () => self.skipWaiting()); self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));")
-        })
+    envPrefix: 'VITE_',
+    server: {
+      allowedHosts: ['.trycloudflare.com'],
+      proxy: backendTarget ? { '/v1': { target: backendTarget, changeOrigin: true } } : undefined,
+    },
+    preview: {
+      allowedHosts: ['.trycloudflare.com'],
+      proxy: backendTarget ? { '/v1': { target: backendTarget, changeOrigin: true } } : undefined,
+    },
+    plugins: [
+      vue(),
+      tailwindcss(),
+      {
+        // Старый production worker был зарегистрирован по /sw.js. При запуске
+        // через Vite он должен получить рабочее обновление, а не HTML fallback.
+        name: 'dev-service-worker-recovery',
+        apply: 'serve',
+        configureServer(server) {
+          server.middlewares.use('/sw.js', (_request, response) => {
+            response.statusCode = 200;
+            response.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+            response.setHeader('Cache-Control', 'no-store');
+            response.end(
+              "self.addEventListener('install', () => self.skipWaiting()); self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));",
+            );
+          });
+        },
+      },
+      VitePWA({
+        registerType: 'autoUpdate',
+        manifest: {
+          name: 'Setlist',
+          short_name: 'Setlist',
+          description: 'Локальная библиотека песен и плейбэков',
+          theme_color: '#171d26',
+          background_color: '#171d26',
+          display: 'standalone',
+          start_url: '/',
+          icons: [
+            { src: 'pwa-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
+          ],
+        },
+        workbox: {
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/v1(?:\/|$)/, /^\/health(?:\/|$)/, /^\/openapi\.yaml$/],
+        },
+        // Офлайн-тестирование выполняется через `vite preview`: только
+        // production-сборка содержит весь бандл в precache. Dev-сервер отдаёт
+        // исходные модули по отдельности и не может гарантировать запуск без сети.
+      }),
+    ],
+    resolve: {
+      alias: {
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
       },
     },
-    VitePWA({
-      registerType: 'autoUpdate',
-      manifest: {
-        name: 'Setlist',
-        short_name: 'Setlist',
-        description: 'Локальная библиотека песен и плейбэков',
-        theme_color: '#171d26',
-        background_color: '#171d26',
-        display: 'standalone',
-        start_url: '/',
-        icons: [
-          { src: 'pwa-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
-        ],
-      },
-      workbox: {
-        navigateFallback: '/index.html',
-      },
-      // Офлайн-тестирование выполняется через `vite preview`: только
-      // production-сборка содержит весь бандл в precache. Dev-сервер отдаёт
-      // исходные модули по отдельности и не может гарантировать запуск без сети.
-    }),
-  ],
-  resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
-  },
-  }
-})
+  };
+});

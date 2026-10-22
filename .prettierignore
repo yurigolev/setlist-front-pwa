@@ -1,0 +1,16 @@
+node_modules/
+dist/
+dev-dist/
+coverage/
+package-lock.json
+.agents/
+.serena/
+.omx/
+.playwright-cli/
+.idea/
+.qa-song/
+output/
+design/qa/
+design-qa.md
+TUNNEL.local.md
+.husky/_/
