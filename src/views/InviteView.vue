@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useSetlistsStore } from '@/stores/setlists';
 import AppButton from '@/components/ui/AppButton.vue';
+import YandexLoginButton from '@/components/YandexLoginButton.vue';
 
 const pendingKey = 'setlist-pending-invitation';
 const auth = useAuthStore();
@@ -68,9 +69,7 @@ async function accept(): Promise<void> {
       <p v-if="!token">В ссылке нет приглашения. Попросите владельца прислать новую ссылку.</p>
       <template v-else>
         <p>Примите приглашение, чтобы открыть общий сетлист.</p>
-        <AppButton v-if="!auth.user || auth.reauthRequired" type="button" @click="login"
-          >Войти через Telegram</AppButton
-        >
+        <YandexLoginButton v-if="!auth.user || auth.reauthRequired" @click="login" />
         <AppButton v-else type="button" :disabled="acceptDisabled" @click="accept">{{
           busy ? 'Принимаем…' : 'Принять приглашение'
         }}</AppButton>

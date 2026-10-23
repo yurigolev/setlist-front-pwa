@@ -15,6 +15,7 @@ provide(pageHeaderKey, pageHeader);
 <template>
   <div class="route-page">
     <header
+      v-show="pageHeader"
       class="layout-header"
       :class="{
         'layout-header--public': publicPage,

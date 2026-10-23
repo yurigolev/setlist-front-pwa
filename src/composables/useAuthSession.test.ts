@@ -445,3 +445,28 @@ it('холодный старт без сети показывает offline б�
   expect(auth.reauthRequired.value).toBe(false);
   expect(auth.localOnly.value).toBe(true);
 });
+
+describe('вход через Яндекс', () => {
+  it.each([
+    ['/songs/a?tab=notes', '/songs/a?tab=notes'],
+    ['/invite', '/invite'],
+    ['https://evil.test', '/'],
+    ['//evil.test', '/'],
+  ])('открывает серверный OAuth с безопасным returnTo: %s', (returnTo, expected) => {
+    const assign = vi.fn();
+    vi.stubGlobal('window', { location: { assign } });
+    useAuthSession().login(returnTo);
+    expect(assign).toHaveBeenCalledOnce();
+    expect(assign).toHaveBeenCalledWith(
+      `/v1/auth/yandex/start?returnTo=${encodeURIComponent(expected)}`,
+    );
+  });
+  it('не начинает новый вход, пока не завершён предыдущий выход', () => {
+    localStorage.setItem('setlist-logout-pending', 'alice');
+    const assign = vi.fn();
+    vi.stubGlobal('window', { location: { assign } });
+    useAuthSession().login('/invite');
+    expect(assign).not.toHaveBeenCalled();
+    expect(useAuthSession().error.value).toContain('Сначала завершите выход');
+  });
+});

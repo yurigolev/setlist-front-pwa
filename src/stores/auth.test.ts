@@ -12,7 +12,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn());
 });
 afterEach(() => vi.unstubAllGlobals());
-describe('сессия Telegram', () => {
+describe('сессия Яндекс', () => {
   it('инициализирует один запрос, cookie и CSRF без сохранения токена', async () => {
     vi.mocked(fetch).mockResolvedValue(
       Response.json({ user: { id: 'a', displayName: 'Alice' }, csrfToken: 'csrf' }),

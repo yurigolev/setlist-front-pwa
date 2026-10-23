@@ -137,7 +137,7 @@ export const useSongsStore = defineStore('songs', () => {
     if (auth.localOnly)
       throw new Error(
         auth.reauthRequired
-          ? 'Войдите через Telegram для синхронизации. Сохранённые песни доступны для просмотра.'
+          ? 'Войдите через Яндекс для синхронизации. Сохранённые песни доступны для просмотра.'
           : 'Не удалось проверить вход. Подключитесь к интернету.',
       );
     const c = context();
