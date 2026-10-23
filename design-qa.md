@@ -1,3 +1,67 @@
+# Setlivo login — selected concept QA
+
+Date: 2026-10-23 (Europe/Moscow).
+
+## Source and rendered evidence
+
+- Source visual truth: `/Users/1g/.codex/generated_images/01a16766-e908-7b71-ad83-33f8901af763/exec-5e2e8439-cd1c-407c-9719-043204e946e8.png` — first displayed design selected by the user.
+- Evidence directory: `/Users/1g/.codex/visualizations/2026/10/23/01a16766-e908-7b71-ad83-33f8901af763/`.
+- Original source: 1381 × 1139 pixels; normalized to the intended 875 × 721 CSS target in `login-design-source-normalized.png`.
+- Implementation: `http://127.0.0.1:46544/login`, `login-desktop-final.png` (875 × 721 image pixels and CSS viewport). Browser page scaling was compensated by a 1313 × 1082 viewport override; actual document dimensions were verified. The implementation screenshot was not stretched.
+- Matched state: remembered account, expired session and a completed cached library.
+- Full-view comparison: `login-comparison-final.png` (source left, implementation right).
+- Focused typography/button/fallback comparison: `login-focus-final.png` (source left, implementation right).
+- Mobile: `setlivo-login-mobile.png`, 390 × 844 CSS/image pixels, no horizontal or vertical overflow.
+- Narrow/error state: `setlivo-login-error-mobile.png`, 320 × 640 CSS/image pixels; callback-error query rendered readably with no horizontal overflow.
+
+## Findings and comparison history
+
+Initial comparison (`login-comparison-before-polish.png`, `login-focus-before-polish.png`):
+
+- [P2, fixed] Offline link/caption were too prominent and spaced too far apart. Reduced type to 13/10px and tightened spacing; recentered the content. Final full/focused captures confirm the correction.
+- [P2, fixed] Browser title still said Setlist. Updated HTML title and verified the loaded title is Setlivo.
+- [P3] System-font wordmark metrics and vertical positioning differ slightly from the generated image. Existing product font is retained; no clipping, collision or wrapping defect.
+
+Post-fix comparison: no actionable P0/P1/P2 findings remain.
+
+## Required fidelity surfaces
+
+- **Typography:** centered Setlivo wordmark, 46px system sans on desktop and 42px at narrow widths; 16px subtitle. Exact visible copy retained. Small generated-font differences are P3.
+- **Spacing/layout:** compact 340px group, page surface instead of an app card, no old remote header or repeated session notice. Empty shared header is hidden while its registration anchors remain stable for other screens. Mobile safe-area padding retained.
+- **Colors/tokens:** existing #1b1c27 background, off-white foreground, muted secondary text and sage fallback. The generated mock's raster grain is not a product asset; the existing flat product surface is retained.
+- **Image/asset fidelity:** original official Yandex SVG used with unchanged colors/icon/wording. Native focus/keyboard behavior retained. Standard 56px button height is intentional instead of reproducing raster dimensions. Setlivo is editable brand text rather than decorative image artwork.
+- **Copy/content:** Setlivo, “Песни и сетлисты под рукой”, one primary action and conditional offline fallback. Only the redundant expired-session boilerplate is suppressed on login. Genuine failures/pending logout remain visible. Offline access requires a complete snapshot in the remembered account's namespace and is hidden for logout/access denial.
+
+## Interaction and regression checks
+
+- Browser: clicked the saved-library link; actual saved songs opened with “Нужен вход”, read-only notice and disabled add-song control.
+- Browser: official button artwork loaded; proper accessible login label.
+- Browser: unavailable-provider callback query rendered at 320px without overflow.
+- Browser console inspection returned no error entries in this preview.
+- Frontend suite: **117 tests passed**, including safe login returnTo, complete/incomplete cache, account changes, pending logout and callback errors.
+- Scoped ESLint, vue-tsc, formatting, diff check and local Docker frontend build passed.
+- Only local frontend rebuilt/recreated for this screen. Backend/storage were not restarted. No Git publication or production deployment.
+- Viewport overrides reset; verified in-app preview remains open.
+
+## Open questions / follow-up polish
+
+- Optional P3: choose a dedicated brand font later if exact generated-wordmark metrics are desired.
+- Existing Chrome PWA tabs may retain the old shell; verified fresh in-app preview shows the updated build. No cookie or private-storage clearing was performed.
+- Real provider consent was not repeated for this visual change; the existing login handler and session safeguards are retained and regression-tested.
+
+## Implementation checklist
+
+- [x] Selected design implemented in the existing app.
+- [x] Cached-library fallback works without weakening session/access rules.
+- [x] Desktop/mobile states captured and compared; P2 findings fixed and recaptured.
+- [x] Tests, lint, types and frontend build passed.
+
+final result: passed
+
+---
+
+# Previous design QA history
+
 # Setlists redesign QA
 
 final result: passed

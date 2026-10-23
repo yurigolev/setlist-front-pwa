@@ -29,7 +29,7 @@ const description = computed(() =>
 );
 const actionLabel = computed(() =>
   auth.reauthRequired
-    ? 'Войти через Telegram'
+    ? 'Войти через Яндекс'
     : offline.value && !auth.verificationPending
       ? 'Повторить подключение'
       : 'Повторить проверку входа',

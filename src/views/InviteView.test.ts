@@ -51,7 +51,7 @@ it('remembered expired user can log in with invitation retained', async () => {
   const login = vi.spyOn(auth, 'login').mockImplementation(() => undefined);
   await mount();
   expect(button('Принять приглашение')).toBeUndefined();
-  button('Войти через Telegram')!.click();
+  button('Войти с Яндекс ID')!.click();
   expect(login).toHaveBeenCalledWith('/invite');
   expect(sessionStorage.getItem('setlist-pending-invitation')).toBe('secret-invitation');
 });
@@ -62,7 +62,7 @@ it('temporary verification failure offers retry and blocks acceptance without ex
     auth.verificationPending = false;
   });
   await mount();
-  expect(button('Войти через Telegram')).toBeUndefined();
+  expect(button('Войти с Яндекс ID')).toBeUndefined();
   expect(button('Принять приглашение')!.disabled).toBe(true);
   button('Повторить проверку входа')!.click();
   await nextTick();

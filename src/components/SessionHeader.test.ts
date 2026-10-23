@@ -50,7 +50,7 @@ it('expired session notice stays outside page heading row', async () => {
   await mount();
   const notice = document.querySelector('.layout-session-notice');
   expect(notice?.textContent).toContain('Сохранённые данные доступны только для просмотра');
-  expect(notice?.querySelector('button')?.getAttribute('aria-label')).toBe('Войти через Telegram');
+  expect(notice?.querySelector('button')?.getAttribute('aria-label')).toBe('Войти через Яндекс');
   expect(document.querySelector('.layout-header__row')?.textContent).not.toContain(
     'Сохранённые данные',
   );

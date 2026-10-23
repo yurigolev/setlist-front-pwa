@@ -141,7 +141,7 @@ function expire(): void {
   verificationPending.value = false;
   offline.value = false;
   error.value =
-    'Срок входа истёк. Войдите через Telegram для синхронизации. Сохранённые песни доступны для просмотра.';
+    'Срок входа истёк. Войдите через Яндекс для синхронизации. Сохранённые песни доступны для просмотра.';
   unauthorizedCallback?.();
 }
 export function notifyUnauthorized(): void {
@@ -352,7 +352,7 @@ function login(returnTo: unknown): void {
     return;
   }
   window.location.assign(
-    `${apiBaseUrl}/v1/auth/telegram/start?returnTo=${encodeURIComponent(safeReturnTo(returnTo))}`,
+    `${apiBaseUrl}/v1/auth/yandex/start?returnTo=${encodeURIComponent(safeReturnTo(returnTo))}`,
   );
 }
 async function logout(): Promise<void> {
