@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import { clearPrivateDatabases } from '@/repositories/database';
+import { withNetworkDeadline } from '@/services/networkDeadline';
 
 export interface SessionUser {
   id: string;
@@ -221,50 +222,56 @@ async function accept(data: SessionData, epoch: number): Promise<boolean> {
 function raw(path: string, options: RequestInit = {}): Promise<Response> {
   return fetch(`${apiBaseUrl}${path}`, sessionOptions(options));
 }
-async function withLock<T>(work: () => Promise<T>): Promise<T> {
-  return navigator.locks ? navigator.locks.request(lockName, work) : work();
+async function withLock<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!navigator.locks) return work();
+  return signal
+    ? navigator.locks.request(lockName, { signal }, work)
+    : navigator.locks.request(lockName, work);
 }
 function failedResponse(response: Response): never {
   throw new Error(`Не удалось проверить вход (${response.status}). Повторите попытку.`);
 }
-async function recover(epoch: number): Promise<boolean> {
+async function recover(epoch: number, signal?: AbortSignal): Promise<boolean> {
   if (refreshPending) return refreshPending;
-  const pending = withLock(async () => {
-    if (epoch !== generation || logoutPending.value) return false;
-    // Another tab may already have rotated shared cookies while this tab waited.
-    let current: SessionData | undefined;
-    const sessionResponse = await raw('/v1/auth/session');
-    if (epoch !== generation || logoutPending.value) return false;
-    if (sessionResponse.ok) current = checkData(await sessionResponse.json());
-    else if (sessionResponse.status !== 401) failedResponse(sessionResponse);
-    if (current?.refreshEnabled !== false) {
-      if (current) return accept(current, epoch);
-      const context = await raw('/v1/auth/refresh-context');
+  const run = (signal: AbortSignal) =>
+    withLock(async () => {
+      signal.throwIfAborted();
       if (epoch !== generation || logoutPending.value) return false;
-      if (context.status === 401) {
+      // Another tab may already have rotated shared cookies while this tab waited.
+      let current: SessionData | undefined;
+      const sessionResponse = await raw('/v1/auth/session', { signal });
+      if (epoch !== generation || logoutPending.value) return false;
+      if (sessionResponse.ok) current = checkData(await sessionResponse.json());
+      else if (sessionResponse.status !== 401) failedResponse(sessionResponse);
+      if (current?.refreshEnabled !== false) {
+        if (current) return accept(current, epoch);
+        const context = await raw('/v1/auth/refresh-context', { signal });
+        if (epoch !== generation || logoutPending.value) return false;
+        if (context.status === 401) {
+          expire();
+          return false;
+        }
+        if (!context.ok) failedResponse(context);
+        current = checkData(await context.json());
+      }
+      if (epoch !== generation || logoutPending.value) return false;
+      csrfToken = current!.csrfToken;
+      const response = await raw('/v1/auth/refresh', { method: 'POST', signal });
+      if (epoch !== generation || logoutPending.value) return false;
+      if (response.status === 401) {
         expire();
         return false;
       }
-      if (!context.ok) failedResponse(context);
-      current = checkData(await context.json());
-    }
-    if (epoch !== generation || logoutPending.value) return false;
-    csrfToken = current!.csrfToken;
-    const response = await raw('/v1/auth/refresh', { method: 'POST' });
-    if (epoch !== generation || logoutPending.value) return false;
-    if (response.status === 401) {
-      expire();
-      return false;
-    }
-    if (response.status === 409) {
-      const updated = await raw('/v1/auth/session');
-      if (epoch !== generation || logoutPending.value) return false;
-      if (!updated.ok) throw new Error('Обновление входа ещё не завершено. Повторите попытку.');
-      return accept(checkData(await updated.json()), epoch);
-    }
-    if (!response.ok) failedResponse(response);
-    return accept(checkData(await response.json()), epoch);
-  });
+      if (response.status === 409) {
+        const updated = await raw('/v1/auth/session', { signal });
+        if (epoch !== generation || logoutPending.value) return false;
+        if (!updated.ok) throw new Error('Обновление входа ещё не завершено. Повторите попытку.');
+        return accept(checkData(await updated.json()), epoch);
+      }
+      if (!response.ok) failedResponse(response);
+      return accept(checkData(await response.json()), epoch);
+    }, signal);
+  const pending = signal ? run(signal) : withNetworkDeadline(run);
   refreshPending = pending;
   try {
     return await pending;
@@ -273,7 +280,11 @@ async function recover(epoch: number): Promise<boolean> {
   }
 }
 function networkFailure(cause: unknown): void {
-  if (!navigator.onLine || cause instanceof TypeError) {
+  if (
+    !navigator.onLine ||
+    cause instanceof TypeError ||
+    (cause instanceof DOMException && cause.name === 'TimeoutError')
+  ) {
     offline.value = true;
     user.value ??= rememberedUser();
   }
@@ -288,16 +299,24 @@ function initialize(force = false): Promise<void> {
     try {
       logoutPending.value = localStorage.getItem(logoutKey) !== null;
       if (logoutPending.value) return;
-      const response = await raw('/v1/auth/session');
-      if (epoch !== generation) return;
-      if (response.status === 401) await recover(epoch);
-      else if (!response.ok) failedResponse(response);
-      else {
-        const data = checkData(await response.json());
-        if (epoch !== generation) return;
-        if (data.refreshEnabled === false) await recover(epoch);
-        else await accept(data, epoch);
+      if (!navigator.onLine) {
+        user.value ??= rememberedUser();
+        offline.value = true;
+        verificationPending.value = false;
+        return;
       }
+      await withNetworkDeadline(async (signal) => {
+        const response = await raw('/v1/auth/session', { signal });
+        if (epoch !== generation) return;
+        if (response.status === 401) await recover(epoch, signal);
+        else if (!response.ok) failedResponse(response);
+        else {
+          const data = checkData(await response.json());
+          if (epoch !== generation) return;
+          if (data.refreshEnabled === false) await recover(epoch, signal);
+          else await accept(data, epoch);
+        }
+      });
     } catch (cause) {
       if (epoch === generation) {
         // Cached identity permits reading, but cannot authorize writes before verification.
