@@ -16,6 +16,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn());
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -162,7 +163,9 @@ describe('единая авторизация', () => {
   });
   it('Web Lock перепроверяет access другой вкладки без ротации', async () => {
     await signedIn();
-    const lock = vi.fn(async (_name: string, work: () => Promise<unknown>) => work());
+    const lock = vi.fn(async (_name: string, _options: LockOptions, work: () => Promise<unknown>) =>
+      work(),
+    );
     Object.defineProperty(navigator, 'locks', { configurable: true, value: { request: lock } });
     try {
       let requests = 0;
@@ -309,7 +312,7 @@ it('legacy bootstrap перепроверяет cookie после Web Lock: др
   Object.defineProperty(navigator, 'locks', {
     configurable: true,
     value: {
-      request: async (_name: string, work: () => Promise<unknown>) => {
+      request: async (_name: string, _options: LockOptions, work: () => Promise<unknown>) => {
         entered();
         await new Promise<void>((resolve) => {
           unlock = resolve;
@@ -444,6 +447,93 @@ it('холодный старт без сети показывает offline б�
   expect(auth.verificationPending.value).toBe(false);
   expect(auth.reauthRequired.value).toBe(false);
   expect(auth.localOnly.value).toBe(true);
+});
+
+it('авиарежим восстанавливает сохранённый аккаунт без ожидания fetch', async () => {
+  vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+  localStorage.setItem('setlist-session-user', JSON.stringify(identity));
+  vi.mocked(fetch).mockImplementation(() => new Promise(() => {}));
+  const auth = useAuthSession();
+  void auth.initialize();
+  await Promise.resolve();
+  expect(auth.user.value?.id).toBe('alice');
+  expect(auth.offline.value).toBe(true);
+  expect(auth.localOnly.value).toBe(true);
+  expect(auth.ready.value).toBe(true);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it('зависший запрос при onLine=true не блокирует сохранённую библиотеку навсегда', async () => {
+  vi.useFakeTimers();
+  localStorage.setItem('setlist-session-user', JSON.stringify(identity));
+  vi.mocked(fetch).mockImplementation(
+    (_url, options) =>
+      new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(options.signal!.reason));
+      }),
+  );
+  const auth = useAuthSession();
+  void auth.initialize();
+  await vi.advanceTimersByTimeAsync(5_000);
+  expect(auth.ready.value).toBe(true);
+  expect(auth.user.value?.id).toBe('alice');
+  expect(auth.localOnly.value).toBe(true);
+  expect(auth.reauthRequired.value).toBe(false);
+});
+
+it('ожидание Web Lock другой вкладки тоже ограничено сроком запуска', async () => {
+  vi.useFakeTimers();
+  localStorage.setItem('setlist-session-user', JSON.stringify(identity));
+  Object.defineProperty(navigator, 'locks', {
+    configurable: true,
+    value: {
+      request: (_name: string, options: LockOptions) =>
+        new Promise((_resolve, reject) => {
+          options.signal!.addEventListener('abort', () => reject(options.signal!.reason));
+        }),
+    },
+  });
+  vi.mocked(fetch).mockResolvedValueOnce(unauthorized());
+  try {
+    const auth = useAuthSession();
+    const init = auth.initialize();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await init;
+    expect(auth.ready.value).toBe(true);
+    expect(auth.user.value?.id).toBe('alice');
+    expect(auth.localOnly.value).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  } finally {
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: undefined });
+  }
+});
+
+it('долгая загрузка файла не ограничена сроком проверки входа', async () => {
+  await signedIn();
+  vi.useFakeTimers();
+  let finish!: (value: Response) => void;
+  vi.mocked(fetch).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const download = authFetch('/v1/file');
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(useAuthSession().localOnly.value).toBe(false);
+  finish(new Response('large attachment'));
+  expect(await (await download).text()).toBe('large attachment');
+});
+
+it('авиарежим не восстанавливает аккаунт после незавершённого выхода', async () => {
+  vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+  localStorage.setItem('setlist-session-user', JSON.stringify(identity));
+  localStorage.setItem('setlist-logout-pending', identity.id);
+  const auth = useAuthSession();
+  await auth.initialize();
+  expect(auth.logoutPending.value).toBe(true);
+  expect(auth.user.value).toBeUndefined();
+  expect(fetch).not.toHaveBeenCalled();
 });
 
 describe('вход через Яндекс', () => {

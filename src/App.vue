@@ -57,7 +57,11 @@ async function logout(): Promise<void> {
           <main v-if="auth.accessDenied && pageRoute.name !== 'profile'" class="login-page">
             <PageHeader title="Библиотека" />
           </main>
-          <component :is="Component" v-else />
+          <component :is="Component" v-else-if="Component" />
+          <main v-else class="app-page" role="status" aria-live="polite">
+            <PageHeader title="Setlivo" />
+            <p class="library-message">Открываем библиотеку…</p>
+          </main>
         </AppPageFrame>
       </Transition>
     </RouterView>

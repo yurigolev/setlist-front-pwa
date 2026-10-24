@@ -2,7 +2,8 @@ import { computed, onScopeDispose, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 import { useAuthStore, type SessionUser } from './auth';
 import { sessionVersion } from '@/composables/useAuthSession';
-import { ApiError, json, request } from '@/services/libraryApi';
+import { ApiError, UnknownResultError, json, request } from '@/services/libraryApi';
+import { withNetworkDeadline } from '@/services/networkDeadline';
 import {
   clearPrivateDatabases,
   closePrivateConnections,
@@ -56,6 +57,53 @@ export const useSetlistsStore = defineStore('setlists', () => {
   let generation = 0;
   let initializationVersion = 0;
   const key = () => `setlist-selection:${auth.user?.id}`;
+  function rememberSelection(): void {
+    if (!auth.user) return;
+    if (!setlists.value.length) {
+      localStorage.removeItem(key());
+      return;
+    }
+    localStorage.setItem(
+      key(),
+      JSON.stringify({
+        id: selectedId.value,
+        setlist: current.value,
+        setlists: setlists.value,
+      }),
+    );
+  }
+  function savedSelection(): { id?: string; setlists: Setlist[] } {
+    try {
+      const saved = JSON.parse(localStorage.getItem(key()) ?? 'null');
+      // Keep the previous single-setlist format readable after an update.
+      const items = saved?.setlists ?? (saved?.setlist ? [saved.setlist] : []);
+      return {
+        id: typeof saved?.id === 'string' ? saved.id : undefined,
+        setlists: Array.isArray(items)
+          ? items.filter(
+              (item): item is Setlist =>
+                item &&
+                typeof item.id === 'string' &&
+                typeof item.title === 'string' &&
+                ['owner', 'editor', 'viewer'].includes(item.role) &&
+                Number.isInteger(item.revision),
+            )
+          : [],
+      };
+    } catch {
+      return { setlists: [] };
+    }
+  }
+  function restoreSelection(): boolean {
+    const saved = savedSelection();
+    if (!setlists.value.length) setlists.value = saved.setlists;
+    const id =
+      setlists.value.find((item) => item.id === selectedId.value)?.id ??
+      setlists.value.find((item) => item.id === saved.id)?.id ??
+      setlists.value[0]?.id;
+    if (id) select(id);
+    return Boolean(id);
+  }
   function reset(): void {
     generation++;
     selectedId.value = undefined;
@@ -80,16 +128,14 @@ export const useSetlistsStore = defineStore('setlists', () => {
   onScopeDispose(() => window.removeEventListener('setlist-session-reset', reset));
   function select(id: string): void {
     if (id === selectedId.value) {
-      if (!auth.localOnly)
-        localStorage.setItem(key(), JSON.stringify({ id, setlist: current.value }));
+      rememberSelection();
       return;
     }
     if (!setlists.value.some((item) => item.id === id)) throw new Error('Нет доступа к сет-листу');
     selectionVersion++;
     closePrivateConnections();
     selectedId.value = id;
-    if (!auth.localOnly)
-      localStorage.setItem(key(), JSON.stringify({ id, setlist: current.value }));
+    rememberSelection();
   }
   async function initialize(force = false): Promise<void> {
     if (ready.value && !force) return;
@@ -107,13 +153,11 @@ export const useSetlistsStore = defineStore('setlists', () => {
     error.value = '';
     try {
       if (auth.localOnly) {
-        const saved = JSON.parse(localStorage.getItem(key()) ?? 'null');
-        if (valid() && !setlists.value.length && saved?.id && saved?.setlist?.id === saved.id) {
-          setlists.value = [saved.setlist];
-          select(saved.id);
-        }
+        if (valid()) restoreSelection();
       } else {
-        const data = (await json('/v1/setlists')) as { setlists: Setlist[] };
+        const data = (await withNetworkDeadline((signal) => json('/v1/setlists', { signal }))) as {
+          setlists: Setlist[];
+        };
         if (!valid()) return;
         if (!Array.isArray(data.setlists)) throw new Error('Некорректный ответ сервера');
         if (selectedId.value && !data.setlists.some((item) => item.id === selectedId.value)) {
@@ -128,7 +172,7 @@ export const useSetlistsStore = defineStore('setlists', () => {
         );
         if (!valid()) return;
         setlists.value = data.setlists;
-        const saved = JSON.parse(localStorage.getItem(key()) ?? 'null');
+        const saved = savedSelection();
         const id =
           setlists.value.find((item) => item.id === selectedId.value)?.id ??
           setlists.value.find((item) => item.id === saved?.id)?.id ??
@@ -141,6 +185,10 @@ export const useSetlistsStore = defineStore('setlists', () => {
       }
       if (valid()) ready.value = true;
     } catch (cause) {
+      if (valid() && cause instanceof UnknownResultError && auth.localOnly && restoreSelection()) {
+        ready.value = true;
+        return;
+      }
       if (valid())
         error.value = cause instanceof Error ? cause.message : 'Не удалось открыть сет-листы';
       throw cause;
@@ -209,6 +257,7 @@ export const useSetlistsStore = defineStore('setlists', () => {
       localStorage.removeItem(key());
     }
     setlists.value = setlists.value.filter((item) => item.id !== id);
+    rememberSelection();
     await clearPrivateDatabases(userId, id);
   }
   function recheckOnFocus(): void {
@@ -262,7 +311,7 @@ export const useSetlistsStore = defineStore('setlists', () => {
       c.valid,
     );
     setlists.value = setlists.value.map((s) => (s.id === item.id ? item : s));
-    localStorage.setItem(key(), JSON.stringify({ id: item.id, setlist: item }));
+    rememberSelection();
   }
   async function remove(): Promise<void> {
     const c = capture(true);
