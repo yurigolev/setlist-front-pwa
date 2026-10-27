@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { ToggleGroupItem, ToggleGroupRoot } from 'reka-ui'
+import { computed } from 'vue';
+import { ToggleGroupItem, ToggleGroupRoot } from 'reka-ui';
 
-const props = defineProps<{ modelValue: string }>()
-const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+const props = defineProps<{ modelValue: string }>();
+const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 
 const model = computed({
   get: () => props.modelValue,
   set: (value: string | undefined) => {
-    if (value) emit('update:modelValue', value)
+    if (value) emit('update:modelValue', value);
   },
-})
+});
 </script>
 
 <template>

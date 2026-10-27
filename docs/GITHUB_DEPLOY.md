@@ -111,13 +111,13 @@ sudo docker volume ls
 
 Настройки deploy-workflow в `Settings → Secrets and variables → Actions`:
 
-| Переменная | Тип | Значение |
-| --- | --- | --- |
-| `DEPLOY_HOST` | Variable | IP или SSH-hostname VPS |
-| `DEPLOY_PORT` | Variable | SSH-порт |
-| `DEPLOY_USER` | Variable | Пользователь `deploy` |
-| `SSH_PRIVATE_KEY` | Secret | Отдельный многострочный приватный ключ CI |
-| `SSH_KNOWN_HOSTS` | Secret | Заранее проверенная запись host key VPS |
+| Переменная        | Тип      | Значение                                  |
+| ----------------- | -------- | ----------------------------------------- |
+| `DEPLOY_HOST`     | Variable | IP или SSH-hostname VPS                   |
+| `DEPLOY_PORT`     | Variable | SSH-порт                                  |
+| `DEPLOY_USER`     | Variable | Пользователь `deploy`                     |
+| `SSH_PRIVATE_KEY` | Secret   | Отдельный многострочный приватный ключ CI |
+| `SSH_KNOWN_HOSTS` | Secret   | Заранее проверенная запись host key VPS   |
 
 Если ваш тариф поддерживает environments для этих репозиториев, создать `production`, ограничить deployment branches основной веткой, использовать environment secrets и `environment: production` в deploy-job. Если environments недоступны, использовать repository secrets и явно проверять допустимую ветку в workflow. Required reviewers тоже зависят от тарифа и видимости репозитория; базовый путь инструкции — отдельный ручной workflow, который не требует этой функции.
 
