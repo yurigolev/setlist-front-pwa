@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils'
-import { buttonVariants } from '@/lib/variants'
+import { cn } from '@/lib/utils';
+import { buttonVariants } from '@/lib/variants';
 
-defineOptions({ inheritAttrs: false })
+defineOptions({ inheritAttrs: false });
 
-withDefaults(defineProps<{
-  variant?: 'primary' | 'ghost' | 'icon'
-}>(), { variant: 'primary' })
+withDefaults(
+  defineProps<{
+    variant?: 'primary' | 'ghost' | 'icon';
+  }>(),
+  { variant: 'primary' },
+);
 </script>
 
 <template>

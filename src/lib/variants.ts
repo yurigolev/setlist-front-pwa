@@ -1,4 +1,4 @@
-import { cva } from 'class-variance-authority'
+import { cva } from 'class-variance-authority';
 
 export const buttonVariants = cva('app-button', {
   variants: {
@@ -9,4 +9,4 @@ export const buttonVariants = cva('app-button', {
     },
   },
   defaultVariants: { variant: 'primary' },
-})
+});

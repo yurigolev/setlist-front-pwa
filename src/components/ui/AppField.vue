@@ -1,22 +1,27 @@
 <script setup lang="ts">
-import { Label } from 'reka-ui'
+import { Label } from 'reka-ui';
 
-const props = withDefaults(defineProps<{
-  id: string
-  label: string
-  modelValue?: string
-  multiline?: boolean
-  rows?: number
-  required?: boolean
-  invalid?: boolean
-}>(), { modelValue: '', multiline: false, rows: 4, required: false, invalid: false })
+const props = withDefaults(
+  defineProps<{
+    id: string;
+    label: string;
+    modelValue?: string;
+    multiline?: boolean;
+    rows?: number;
+    required?: boolean;
+    invalid?: boolean;
+  }>(),
+  { modelValue: '', multiline: false, rows: 4, required: false, invalid: false },
+);
 
-const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 </script>
 
 <template>
   <div class="field">
-    <Label :for="props.id" class="field__label">{{ props.label }}<span v-if="props.required"> *</span></Label>
+    <Label :for="props.id" class="field__label"
+      >{{ props.label }}<span v-if="props.required"> *</span></Label
+    >
     <textarea
       v-if="props.multiline"
       :id="props.id"
