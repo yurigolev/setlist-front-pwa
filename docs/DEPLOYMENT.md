@@ -5,21 +5,24 @@ Workflow: `.github/workflows/frontend.yml`.
 1. Pull Request: `npm ci`, тесты и production-сборка.
 2. Push в `main`: те же проверки, затем Docker-сборка на GitHub runner.
 3. Образ публикуется как `ghcr.io/yurigolev/setlist-front-pwa:<commit SHA>`.
-4. Runner подключается к серверу по SSH и вызывает `sudo /usr/local/sbin/setlist-deploy frontend <commit SHA>`.
+4. Runner подключается к серверу по SSH и вызывает `sudo /usr/local/sbin/setlist-deploy frontend <commit SHA> --env-stdin`, передавая `PRODUCTION_ENV` через stdin.
 
 Ручной повтор: `Actions → Frontend → Run workflow`, ветка `main`. Старые релизы повторно запускать только как осознанный откат. Релизы во время выступления не запускать.
 
 В репозитории `Settings → Secrets and variables → Actions`:
 
-| Имя                  | Тип      | Значение                          |
-| -------------------- | -------- | --------------------------------- |
-| `DEPLOY_HOST`        | Variable | IP или hostname VPS               |
-| `DEPLOY_USER`        | Variable | SSH-пользователь CI               |
-| `DEPLOY_PORT`        | Variable | SSH-порт, по умолчанию 22         |
-| `DEPLOY_SSH_KEY`     | Secret   | Отдельный приватный SSH-ключ CI   |
-| `DEPLOY_KNOWN_HOSTS` | Secret   | Проверенные SSH host keys сервера |
+| Имя                  | Тип      | Значение                                   |
+| -------------------- | -------- | ------------------------------------------ |
+| `DEPLOY_HOST`        | Variable | IP или hostname VPS                        |
+| `DEPLOY_USER`        | Variable | SSH-пользователь CI                        |
+| `DEPLOY_PORT`        | Variable | SSH-порт, по умолчанию 22                  |
+| `DEPLOY_SSH_KEY`     | Secret   | Отдельный приватный SSH-ключ CI            |
+| `DEPLOY_KNOWN_HOSTS` | Secret   | Проверенные SSH host keys сервера          |
+| `PRODUCTION_ENV`     | Secret   | Полный production dotenv без тегов образов |
 
-Пароли приложения, PostgreSQL и MinIO находятся в серверном `.env`; в Git и Docker-образ они не входят. Доступ к GHCR нужен серверу, если пакеты приватные. Для публичных пакетов чтение возможно без авторизации.
+Источник production-настроек — многострочный Secret `PRODUCTION_ENV`. Одинаковое содержимое хранится в обоих репозиториях; при изменении обновляйте обе копии. Формат — production dotenv, без `FRONTEND_IMAGE` и `BACKEND_IMAGE`: теги образов сохраняет серверный deploy-скрипт. Секрет передаётся через SSH stdin и после проверок записывается в `/opt/setlist/.env.production` (`root:600`). Реальные значения не входят в Git и Docker-образ.
+
+До слияния workflow установите обновлённый backend `scripts/deploy.sh` и Python 3 на сервере. Пустой/некорректный env останавливает деплой до замены файла. При изменении настроек выполняются API preflight, резервная копия и обновление затронутых сервисов; при сбое запуска или healthcheck восстанавливаются прежние env и образы. Пароли/идентификаторы существующего PostgreSQL и bucket нельзя менять этим способом: требуется отдельная миграция. Подробности — backend `docs/PRODUCTION_DEPLOY.md`. Доступ к GHCR нужен серверу, если пакеты приватные. Для публичных пакетов чтение возможно без авторизации.
 
 Production Compose и серверный deploy-скрипт находятся в backend-репозитории. Сервер использует готовый образ; установка npm-зависимостей и сборка выполняются на GitHub runner. `VITE_API_BASE_URL` пустой: браузер обращается к `/v1` на том же origin, Nginx проксирует запросы в `api:3000`. `/health` проверяет также доступность API.
 
@@ -40,6 +43,6 @@ VITE_API_BASE_URL= npm run build
 
 Сначала backend с миграцией `0007_refresh_sessions.sql`, затем frontend. Миграция добавляет семейства refresh и nullable связь с существующими access-сессиями; уже выданные cookies сохраняют исходный срок. Действующий legacy access обновлённый клиент преобразует в пару через защищённый backend bootstrap.
 
-Backend defaults: access (`AUTH_SESSION_TTL_SECONDS`) — 900 секунд, refresh (`AUTH_REFRESH_TTL_SECONDS`) — 7776000 секунд. Refresh ротируется с продлением на 90 дней; параметры задаются на сервере. Клиент использует один `useAuthSession`, HttpOnly cookies и CSRF в памяти. При истечении refresh пользователь снова входит через Яндекс, а скачанные файлы сохраняются для того же аккаунта. Logout и подтверждённый отзыв доступа очищают приватные данные.
+Backend defaults: access (`AUTH_SESSION_TTL_SECONDS`) — 900 секунд, refresh (`AUTH_REFRESH_TTL_SECONDS`) — 7776000 секунд. Refresh ротируется с продлением на 90 дней; параметры задаются в `PRODUCTION_ENV` и применяются при деплое. Клиент использует один `useAuthSession`, HttpOnly cookies и CSRF в памяти. При истечении refresh пользователь снова входит через Яндекс, а скачанные файлы сохраняются для того же аккаунта. Logout и подтверждённый отзыв доступа очищают приватные данные.
 
 Реализация и disposable QA не означают deployment или миграцию существующих production/local данных. Выпуск выполняется отдельно в выбранной среде по её штатной процедуре.
