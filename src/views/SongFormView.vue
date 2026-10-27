@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TagPicker from '@/components/TagPicker.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import { computed, onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -28,6 +29,7 @@ const song = ref<Song>();
 const title = ref('');
 const artist = ref('');
 const content = ref('');
+const tagIds = ref<string[]>([]);
 const error = ref('');
 const isSaving = ref(false);
 const fileInput = ref<HTMLInputElement>();
@@ -51,7 +53,10 @@ onBeforeUnmount(() => {
 });
 
 async function load(): Promise<void> {
-  if (!props.id) return;
+  if (!props.id) {
+    await songsStore.load();
+    return;
+  }
   if (!songsStore.songs.length) await songsStore.load();
   if (!alive) return;
   const loaded = await songsStore.get(props.id);
@@ -64,6 +69,7 @@ async function load(): Promise<void> {
   title.value = song.value.title;
   artist.value = song.value.artist ?? '';
   content.value = song.value.content ?? '';
+  tagIds.value = [...(song.value.tagIds ?? [])];
 }
 
 async function save(): Promise<void> {
@@ -99,9 +105,15 @@ async function save(): Promise<void> {
               title: title.value,
               artist: artist.value,
               content: content.value,
+              tagIds: tagIds.value,
             })
           : await songsStore.create(
-              { title: title.value, artist: artist.value, content: content.value },
+              {
+                title: title.value,
+                artist: artist.value,
+                content: content.value,
+                tagIds: tagIds.value,
+              },
               createKey.value,
             );
     if (!alive) return;
@@ -273,6 +285,7 @@ onUnmounted(() => window.removeEventListener('paste', handlePaste));
               :rows="14"
             />
           </div>
+          <TagPicker v-model="tagIds" :disabled="isSaving || textSaved || !songsStore.canWrite" />
           <p v-if="error" class="form-error" role="alert">{{ error }}</p>
           <section class="edit-attachments" aria-labelledby="edit-attachments-heading">
             <h2 id="edit-attachments-heading">Вложения</h2>

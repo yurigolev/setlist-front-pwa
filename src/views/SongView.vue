@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppTag from '@/components/ui/AppTag.vue';
 import PageHeader from '@/components/PageHeader.vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -138,6 +139,15 @@ onMounted(load);
       <p v-if="error" class="form-error" role="alert">{{ error }}</p>
       <p v-if="!song" class="muted">Загружаем песню…</p>
       <template v-else>
+        <div v-if="song.tagIds?.length" class="tag-chips song-detail__tags" aria-label="Теги песни">
+          <AppTag
+            v-for="tag in songsStore.tags.filter((tag) => song?.tagIds?.includes(tag.id))"
+            :key="tag.id"
+            :label="tag.name"
+            :color="tag.color"
+            size="lg"
+          />
+        </div>
         <section v-if="song.content.trim()" class="song-notes" aria-labelledby="notes-heading">
           <h2 id="notes-heading">Заметки</h2>
           <p>{{ song.content }}</p>

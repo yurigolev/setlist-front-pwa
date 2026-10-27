@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import PageHeader from '@/components/PageHeader.vue';
+import TagManager from '@/components/TagManager.vue';
+import { useSongsStore } from '@/stores/songs';
 import {
   PhCheck,
   PhCrown,
@@ -31,7 +33,7 @@ import {
   DropdownMenuItemIndicator,
 } from 'reka-ui';
 import UserAvatar from '@/components/UserAvatar.vue';
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useSetlistsStore, type Invitation, type Member } from '@/stores/setlists';
 import AppButton from '@/components/ui/AppButton.vue';
@@ -40,10 +42,42 @@ import AppBackButton from '@/components/ui/AppBackButton.vue';
 
 const setlists = useSetlistsStore();
 const router = useRouter();
+const songsStore = useSongsStore();
+const error = ref('');
 const title = ref(setlists.current?.title ?? '');
 const members = ref<Member[]>([]);
 const invitations = ref<Invitation[]>([]);
-const tab = ref<'general' | 'members' | 'invitations'>('invitations');
+const tab = ref<'general' | 'access' | 'tags'>(
+  setlists.current?.role === 'owner' ? 'access' : 'tags',
+);
+const settingsTabs = computed(() =>
+  setlists.current?.role === 'owner'
+    ? ([
+        ['general', 'Общее'],
+        ['tags', 'Теги'],
+        ['access', 'Доступ'],
+      ] as const)
+    : ([['tags', 'Теги']] as const),
+);
+watch(
+  () => setlists.current?.role,
+  (role) => {
+    if (role !== 'owner') tab.value = 'tags';
+  },
+);
+watch(
+  () => setlists.selectedId,
+  async (id) => {
+    if (!id) return;
+    try {
+      await songsStore.load();
+    } catch (cause) {
+      if (id === setlists.selectedId)
+        error.value = cause instanceof Error ? cause.message : 'Не удалось загрузить теги';
+    }
+  },
+  { immediate: true },
+);
 const inviteOpen = ref(false);
 function openInvite(): void {
   inviteOpen.value = true;
@@ -55,7 +89,6 @@ const role = ref<'editor' | 'viewer'>('viewer');
 const inviteUrl = ref('');
 const copied = ref(false);
 const busy = ref(false);
-const error = ref('');
 const roleLabels = { owner: 'Владелец', editor: 'Редактор', viewer: 'Просмотр' };
 const memberRoles = [
   { value: 'owner', label: 'Владелец', description: 'Полный доступ и управление', icon: PhCrown },
@@ -177,14 +210,10 @@ function status(item: Invitation): string {
           ><AppBackButton label="Назад к сетлистам" @click="router.push('/setlists')"
         /></template>
       </PageHeader>
-      <template v-if="setlists.current?.role === 'owner'">
+      <template v-if="setlists.current?.role === 'owner' || setlists.current?.role === 'editor'">
         <nav class="settings-segments" aria-label="Разделы настроек">
           <button
-            v-for="entry in [
-              ['general', 'Общее'],
-              ['members', 'Участники'],
-              ['invitations', 'Приглашения'],
-            ] as const"
+            v-for="entry in settingsTabs"
             :key="entry[0]"
             type="button"
             :class="{ active: tab === entry[0] }"
@@ -197,8 +226,11 @@ function status(item: Invitation): string {
         <p v-if="error || setlists.error" class="form-error" role="alert">
           {{ error || setlists.error }}
         </p>
-        <p v-if="!setlists.canManage" class="muted">Для управления требуется интернет.</p>
-        <section v-if="tab === 'general'" class="settings-panel">
+        <p v-if="!songsStore.canWrite" class="muted">Для управления требуется интернет.</p>
+        <section
+          v-if="setlists.current?.role === 'owner' && tab === 'general'"
+          class="settings-panel"
+        >
           <h2>Название сетлиста</h2>
           <form @submit.prevent="rename">
             <AppField id="setlist-title" v-model="title" label="Название" required />
@@ -209,7 +241,10 @@ function status(item: Invitation): string {
             >
           </form>
         </section>
-        <section v-else-if="tab === 'members'" class="settings-panel">
+        <section
+          v-else-if="setlists.current?.role === 'owner' && tab === 'access'"
+          class="settings-panel"
+        >
           <div class="settings-section-title">
             <h2>
               Участники <small>{{ members.length }}</small>
@@ -279,16 +314,8 @@ function status(item: Invitation): string {
               </DropdownMenuRoot>
             </li>
           </ul>
-        </section>
-        <section v-else class="settings-panel">
-          <h2>Приглашения</h2>
-          <p class="settings-description">Доступ к этому сетлисту.</p>
-          <AppButton
-            class="settings-invite"
-            :disabled="busy || !setlists.canManage"
-            @click="openInvite"
-            ><PhUserPlus :size="22" />Создать приглашение</AppButton
-          >
+          <h2 class="settings-invitations-title">Приглашения</h2>
+          <p class="settings-description">Одноразовые ссылки для новых участников.</p>
           <p v-if="!invitations.length" class="settings-empty">Приглашений пока нет.</p>
           <ul v-else class="settings-rows" aria-label="Созданные приглашения">
             <li v-for="item in invitations" :key="item.id">
@@ -325,11 +352,31 @@ function status(item: Invitation): string {
             </li>
           </ul>
         </section>
-        <button class="settings-delete" :disabled="busy || !setlists.canManage" @click="remove">
+        <section
+          v-else
+          class="settings-panel settings-panel--tags"
+          aria-labelledby="setlist-tags-heading"
+        >
+          <h2 id="setlist-tags-heading">Теги песен</h2>
+          <p class="settings-description">Помогают находить песни по настроению.</p>
+          <p v-if="songsStore.isLoading || songsStore.isSyncing" class="muted" role="status">
+            Загружаем теги…
+          </p>
+          <p v-if="songsStore.syncError" class="form-error" role="alert">
+            {{ songsStore.syncError }}
+          </p>
+          <TagManager v-if="!songsStore.isLoading && !songsStore.syncError" />
+        </section>
+        <button
+          v-if="setlists.current?.role === 'owner'"
+          class="settings-delete"
+          :disabled="busy || !setlists.canManage"
+          @click="remove"
+        >
           <PhTrash :size="21" />Удалить сетлист
         </button>
       </template>
-      <p v-else class="muted">Настройки доступны владельцу сетлиста.</p>
+      <p v-else class="muted">Настройки доступны владельцу и редактору сетлиста.</p>
     </div>
     <DialogRoot v-model:open="inviteOpen"
       ><DialogPortal
@@ -393,7 +440,8 @@ function status(item: Invitation): string {
 }
 .settings-segments {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -418,6 +466,19 @@ function status(item: Invitation): string {
 .settings-panel h2 {
   margin: 0;
   font-size: 1.2rem;
+}
+.settings-panel--tags h2 {
+  font-size: 28px;
+  letter-spacing: -0.025em;
+}
+.settings-panel--tags .settings-description {
+  font-size: 16px;
+  margin-top: 12px;
+}
+.settings-panel .settings-invitations-title {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
 }
 .settings-panel h2 small {
   font-size: 0.85rem;

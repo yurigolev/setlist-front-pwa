@@ -1,4 +1,6 @@
-import type { Attachment, NewSong, Song } from '@/domain/song';
+import type { Attachment, NewSong, Song, SongTag } from '@/domain/song';
+import { isTagColor } from '@/domain/tagColor';
+import { isTagName, normalizeTagName } from '@/domain/tagName';
 import { apiBaseUrl, authFetch, sessionVersion } from './sessionTransport';
 export { apiBaseUrl } from './sessionTransport';
 
@@ -47,7 +49,32 @@ export function serverSong(value: unknown): Song {
     revision: Number(data.revision),
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
+    tagIds: serverTagIds(data.tagIds),
     attachments: Array.isArray(data.attachments) ? data.attachments.map(serverAttachment) : [],
+  };
+}
+function serverTagIds(value: unknown): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((id) => typeof id !== 'string' || !uuid.test(id)))
+    throw new Error('Некорректные теги песни');
+  return [...new Set(value as string[])];
+}
+export function serverTag(value: unknown): SongTag {
+  const data = object(value);
+  if (
+    typeof data.id !== 'string' ||
+    !uuid.test(data.id) ||
+    typeof data.name !== 'string' ||
+    !data.name.trim() ||
+    (data.color !== undefined && data.color !== null && !isTagColor(data.color))
+  )
+    throw new Error('Некорректный тег');
+  return {
+    id: data.id,
+    name: data.name,
+    ...(data.color !== undefined
+      ? { color: data.color === null ? null : String(data.color).toUpperCase() }
+      : {}),
   };
 }
 function serverAttachment(value: unknown): Attachment {
@@ -87,6 +114,7 @@ export interface LibrarySnapshot {
   libraryRevision: number;
   role?: 'owner' | 'editor' | 'viewer';
   songs: Song[];
+  tags?: SongTag[];
 }
 export async function request(path: string, options: RequestInit = {}): Promise<Response> {
   const version = sessionVersion();
@@ -105,7 +133,15 @@ export async function request(path: string, options: RequestInit = {}): Promise<
     )
       window.dispatchEvent(new Event('setlist-access-denied'));
     throw new ApiError(
-      typeof data.message === 'string' ? data.message : `Ошибка сервера ${response.status}`,
+      data.code === 'TAG_NAME_CONFLICT'
+        ? 'Тег с таким названием уже существует.'
+        : data.code === 'TAG_NOT_FOUND'
+          ? 'Тег уже удалён. Обновите библиотеку.'
+          : data.code === 'INVALID_TAG_IDS'
+            ? 'Теги изменились. Обновите библиотеку и выберите их снова.'
+            : typeof data.message === 'string'
+              ? data.message
+              : `Ошибка сервера ${response.status}`,
       response.status,
       typeof data.code === 'string' ? data.code : undefined,
       typeof data.currentRevision === 'number' ? data.currentRevision : undefined,
@@ -116,11 +152,21 @@ export async function request(path: string, options: RequestInit = {}): Promise<
 export async function json(path: string, options?: RequestInit): Promise<unknown> {
   return (await request(path, options)).json();
 }
-function songInput(song: NewSong): { title: string; artist: string; notes: string } {
+function songInput(song: NewSong): {
+  title: string;
+  artist: string;
+  notes: string;
+  tagIds?: string[];
+} {
   const title = song.title.trim(),
     artist = song.artist?.trim() ?? '';
   if (!title || !artist) throw new Error('Укажите название и исполнителя.');
-  return { title, artist, notes: song.content ?? '' };
+  return {
+    title,
+    artist,
+    notes: song.content ?? '',
+    ...(song.tagIds !== undefined ? { tagIds: serverTagIds(song.tagIds) } : {}),
+  };
 }
 function scope(id: string): string {
   if (!uuid.test(id)) throw new Error('Выберите сет-лист');
@@ -137,6 +183,14 @@ export async function fetchSnapshot(setlistId: string): Promise<LibrarySnapshot>
   )
     throw new Error('Некорректный снимок библиотеки');
   const songs = data.songs.map(serverSong);
+  if (data.tags !== undefined && !Array.isArray(data.tags))
+    throw new Error('Некорректные теги снимка');
+  const tags = ((data.tags ?? []) as unknown[]).map(serverTag);
+  if (
+    new Set(tags.map((tag) => tag.id)).size !== tags.length ||
+    songs.some((song) => song.tagIds?.some((id) => !tags.some((tag) => tag.id === id)))
+  )
+    throw new Error('Некорректные связи тегов снимка');
   if (
     songs.some(
       (song) =>
@@ -150,6 +204,7 @@ export async function fetchSnapshot(setlistId: string): Promise<LibrarySnapshot>
     libraryRevision: Number(data.setlistRevision),
     role: data.role as 'owner' | 'editor' | 'viewer',
     songs,
+    tags,
   };
 }
 export async function createSong(input: NewSong, key: string, setlistId: string): Promise<Song> {
@@ -253,4 +308,46 @@ export async function checkAttachment(file: File): Promise<void> {
       (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0));
   if (!(kind === 'image' ? isPng || isJpeg || isWebp : isMp3))
     throw new Error(`Файл «${file.name}» не соответствует формату содержимого.`);
+}
+
+function tagInput(name: string, color?: string | null): { name: string; color?: string | null } {
+  const normalized = normalizeTagName(name);
+  if (!isTagName(normalized))
+    throw new Error('Название тега должно содержать от 1 до 40 символов.');
+  if (color !== undefined && color !== null && !isTagColor(color))
+    throw new Error('Укажите цвет в формате #RRGGBB.');
+  return {
+    name: normalized,
+    ...(color !== undefined ? { color: color?.toUpperCase() ?? null } : {}),
+  };
+}
+export async function createTag(
+  name: string,
+  setlistId: string,
+  color?: string | null,
+): Promise<SongTag> {
+  return serverTag(
+    await json(`${scope(setlistId)}/tags`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tagInput(name, color)),
+    }),
+  );
+}
+export async function updateTag(
+  id: string,
+  name: string,
+  setlistId: string,
+  color?: string | null,
+): Promise<SongTag> {
+  return serverTag(
+    await json(`${scope(setlistId)}/tags/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tagInput(name, color)),
+    }),
+  );
+}
+export async function deleteTag(id: string, setlistId: string): Promise<void> {
+  await request(`${scope(setlistId)}/tags/${id}`, { method: 'DELETE' });
 }

@@ -233,3 +233,59 @@ it('reconnect удаляет отсутствующий scope и сохраня�
   expect((await readSnapshot('reconnect', 'valid')).songs).toHaveLength(1);
   await clearPrivateDatabases();
 });
+
+it('читает прежний кэш без тегов и атомарно заменяет теги вместе с песнями', async () => {
+  const db = await openSetlistDatabase('tags-legacy', libraryId);
+  await db.put('serverSongs', song);
+  db.close();
+  const old = await readSnapshot('tags-legacy', libraryId);
+  expect(old.tags).toEqual([]);
+  expect(old.songs[0]?.tagIds).toEqual([]);
+  const tags = [
+    { id: 'tag-a', name: 'Акустика', color: '#82A5ED' },
+    { id: 'tag-b', name: 'Без цвета', color: null },
+  ];
+  await publishSnapshot(
+    { libraryId, libraryRevision: 2, tags, songs: [{ ...song, tagIds: ['tag-a'] }] },
+    'tags-legacy',
+    () => true,
+    libraryId,
+  );
+  const saved = await readSnapshot('tags-legacy', libraryId);
+  expect(saved.tags).toEqual(tags);
+  expect(saved.songs[0]?.tagIds).toEqual(['tag-a']);
+  expect((await readSnapshot('tags-legacy', 'another-setlist')).tags).toEqual([]);
+  expect((await readSnapshot('another-user', libraryId)).tags).toEqual([]);
+  vi.spyOn(api, 'downloadAttachment').mockRejectedValue(new Error('offline'));
+  await expect(
+    publishSnapshot(
+      {
+        libraryId,
+        libraryRevision: 3,
+        tags: [],
+        songs: [
+          {
+            ...song,
+            attachments: [
+              {
+                id: 'a',
+                songId,
+                kind: 'audio',
+                name: 'a.mp3',
+                mimeType: 'audio/mpeg',
+                fileKey: 'new-file',
+                createdAt: '',
+              },
+            ],
+          },
+        ],
+      },
+      'tags-legacy',
+      () => true,
+      libraryId,
+    ),
+  ).rejects.toThrow('offline');
+  expect((await readSnapshot('tags-legacy', libraryId)).tags).toEqual(tags);
+  expect((await readSnapshot('tags-legacy', libraryId)).songs[0]?.tagIds).toEqual(['tag-a']);
+  await clearPrivateDatabases();
+});

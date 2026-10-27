@@ -235,7 +235,7 @@ textarea:focus-visible,
   font-weight: 670;
   letter-spacing: -0.024em;
 }
-.song-row__copy span {
+.song-row__copy > span {
   margin-top: 4px;
   color: var(--muted);
   font-size: 0.95rem;

@@ -578,7 +578,7 @@ form > .app-button {
   min-width: 0;
 }
 .song-row__copy strong,
-.song-row__copy span {
+.song-row__copy > span {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -589,7 +589,7 @@ form > .app-button {
   font-weight: 600;
   letter-spacing: -0.025em;
 }
-.song-row__copy span {
+.song-row__copy > span {
   margin-top: 5px;
   color: var(--muted);
   font-size: 1rem;
@@ -922,7 +922,7 @@ form > .app-button {
   .song-row__copy strong {
     font-size: 1.18rem;
   }
-  .song-row__copy span {
+  .song-row__copy > span {
     font-size: 0.95rem;
   }
   .library-tabs,
@@ -1249,4 +1249,21 @@ form > .app-button {
 .player-restart:hover {
   color: var(--foreground);
   background: var(--surface-raised);
+}
+
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.song-detail__tags {
+  margin-bottom: 24px;
+  gap: 12px;
+}
+.song-row__copy .song-row__tags {
+  display: flex;
+  white-space: normal;
+  overflow: visible;
+  margin-top: 6px;
+  gap: 4px;
 }
