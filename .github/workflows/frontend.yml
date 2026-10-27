@@ -79,6 +79,7 @@ jobs:
           DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          PRODUCTION_ENV: ${{ secrets.PRODUCTION_ENV }}
           RELEASE_SHA: ${{ github.sha }}
         shell: bash
         run: |
@@ -97,6 +98,7 @@ jobs:
           [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
           [[ "$DEPLOY_PORT" =~ ^[0-9]+$ ]]
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          : "${PRODUCTION_ENV:?Set PRODUCTION_ENV repository secret}"
           ssh_dir=$(mktemp -d)
           trap 'rm -rf "$ssh_dir"' EXIT
           chmod 700 "$ssh_dir"
@@ -107,4 +109,4 @@ jobs:
             -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$ssh_dir/known_hosts" -o ConnectTimeout=15 \
             "$DEPLOY_USER@$DEPLOY_HOST" \
-            "sudo /usr/local/sbin/setlist-deploy frontend $RELEASE_SHA"
+            "sudo -n /usr/local/sbin/setlist-deploy frontend $RELEASE_SHA --env-stdin" <<< "$PRODUCTION_ENV"
