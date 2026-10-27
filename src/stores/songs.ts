@@ -2,7 +2,7 @@ import { useAuthStore } from './auth';
 import { useSetlistsStore } from './setlists';
 import { defineStore } from 'pinia';
 import { computed, onScopeDispose, ref, watch } from 'vue';
-import type { NewSong, Song } from '@/domain/song';
+import type { NewSong, Song, SongTag } from '@/domain/song';
 import * as api from '@/services/libraryApi';
 import { sessionVersion } from '@/composables/useAuthSession';
 import { createUuid } from '@/services/uuid';
@@ -17,6 +17,7 @@ import {
 export const useSongsStore = defineStore('songs', () => {
   const auth = useAuthStore(),
     setlists = useSetlistsStore();
+  const tags = ref<SongTag[]>([]);
   const songs = ref<Song[]>([]),
     isLoading = ref(false),
     isSyncing = ref(false),
@@ -32,6 +33,7 @@ export const useSongsStore = defineStore('songs', () => {
     generation++;
     pending = undefined;
     songs.value = [];
+    tags.value = [];
     meta.value = undefined;
     syncError.value = '';
     isLoading.value = false;
@@ -123,6 +125,7 @@ export const useSongsStore = defineStore('songs', () => {
       const local = await readSnapshot(c.userId, c.setlistId);
       if (!c.valid()) return;
       songs.value = local.songs;
+      tags.value = local.tags;
       meta.value = local.meta;
     } finally {
       if (c.valid()) isLoading.value = false;
@@ -152,6 +155,7 @@ export const useSongsStore = defineStore('songs', () => {
       meta.value = published;
       syncedAt.value[c.setlistId] = published.updatedAt;
       songs.value = local.songs;
+      tags.value = local.tags;
       online.value = true;
       if (setlists.current && snapshot.role) {
         setlists.current.role = snapshot.role;
@@ -272,6 +276,15 @@ export const useSongsStore = defineStore('songs', () => {
       throw cause;
     }
   }
+  async function createTag(name: string, color?: string | null): Promise<SongTag> {
+    return write((id) => api.createTag(name, id, color));
+  }
+  async function updateTag(tagId: string, name: string, color?: string | null): Promise<SongTag> {
+    return write((id) => api.updateTag(tagId, name, id, color));
+  }
+  async function deleteTag(tagId: string): Promise<void> {
+    await write((id) => api.deleteTag(tagId, id));
+  }
   async function create(input: NewSong, key = createUuid()): Promise<Song> {
     return write((id) => api.createSong(input, key, id));
   }
@@ -330,6 +343,10 @@ export const useSongsStore = defineStore('songs', () => {
     cacheUserId,
     cacheSetlistId,
     songs,
+    tags,
+    createTag,
+    updateTag,
+    deleteTag,
     isLoading,
     isSyncing,
     syncError,

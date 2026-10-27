@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { openSetlistDatabase } from '@/repositories/database';
-import { readSnapshot } from '@/repositories/serverSnapshotRepository';
+import { publishSnapshot, readSnapshot } from '@/repositories/serverSnapshotRepository';
 import { apiBaseUrl, configureSession, notifyUnauthorized } from '@/services/sessionTransport';
 import { useAuthStore } from './auth';
 import { useSetlistsStore } from './setlists';
@@ -620,4 +620,62 @@ it('100 дней офлайна и отказ refresh сохраняют фай�
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('держит теги офлайн в выбранном scope, сбрасывает при смене scope и logout', async () => {
+  const store = useSongsStore();
+  const tags = [{ id, name: 'Акустика' }];
+  await publishSnapshot(
+    { libraryId, libraryRevision: 1, tags, songs: [{ ...serverSong, tagIds: [id] }] },
+    'test-user',
+    () => true,
+    libraryId,
+  );
+  store.online = false;
+  await store.load();
+  expect(store.tags).toEqual(tags);
+  expect(store.songs[0]?.tagIds).toEqual([id]);
+  expect(calls).toEqual([]);
+  const lists = useSetlistsStore();
+  const otherId = '33333333-3333-4333-8333-333333333333';
+  lists.setlists.push({ ...lists.current!, id: otherId });
+  lists.select(otherId);
+  expect(store.tags).toEqual([]);
+  await store.load();
+  expect(store.tags).toEqual([]);
+  lists.select(libraryId);
+  await store.load();
+  expect(store.tags).toEqual(tags);
+  window.dispatchEvent(new Event('setlist-session-reset'));
+  expect(store.tags).toEqual([]);
+  expect(store.songs).toEqual([]);
+});
+it('не возвращает тег после смены сессии во время создания', async () => {
+  let finish!: (response: Response) => void;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    ),
+  );
+  const store = useSongsStore();
+  const operation = store.createTag('Новый');
+  useAuthStore().invalidate();
+  finish(Response.json({ id, name: 'Новый' }));
+  await expect(operation).rejects.toThrow('Контекст изменился');
+  expect(store.tags).toEqual([]);
+});
+it('viewer и офлайн не могут менять теги', async () => {
+  const store = useSongsStore();
+  useSetlistsStore().current!.role = 'viewer';
+  await expect(store.createTag('Тег')).rejects.toThrow('Нет права');
+  await expect(store.updateTag(id, 'Тег')).rejects.toThrow('Нет права');
+  await expect(store.deleteTag(id)).rejects.toThrow('Нет права');
+  useSetlistsStore().current!.role = 'owner';
+  store.online = false;
+  await expect(store.createTag('Тег')).rejects.toThrow('Нет права');
+  expect(calls).toEqual([]);
 });

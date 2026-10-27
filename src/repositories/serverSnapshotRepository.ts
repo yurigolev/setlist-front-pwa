@@ -1,4 +1,4 @@
-import type { Song } from '@/domain/song';
+import type { Song, SongTag } from '@/domain/song';
 import { openSetlistDatabase } from './database';
 import { downloadAttachment, type LibrarySnapshot } from '@/services/libraryApi';
 import { sha256Hex } from '@/services/checksum';
@@ -13,12 +13,20 @@ export interface SnapshotMeta {
 export async function readSnapshot(
   userId?: string,
   setlistId?: string,
-): Promise<{ songs: Song[]; meta?: SnapshotMeta }> {
+): Promise<{ songs: Song[]; tags: SongTag[]; meta?: SnapshotMeta }> {
   const db = await openSetlistDatabase(userId, setlistId);
   try {
+    const transaction = db.transaction(['serverSongs', 'serverMeta'], 'readonly');
+    const [songs, tags, meta] = await Promise.all([
+      transaction.objectStore('serverSongs').getAll(),
+      transaction.objectStore('serverMeta').get('tags'),
+      transaction.objectStore('serverMeta').get('complete'),
+    ]);
+    await transaction.done;
     return {
-      songs: await db.getAll('serverSongs'),
-      meta: (await db.get('serverMeta', 'complete')) as SnapshotMeta | undefined,
+      songs: songs.map((song) => ({ ...song, tagIds: song.tagIds ?? [] })),
+      tags: (tags as SongTag[] | undefined) ?? [],
+      meta: meta as SnapshotMeta | undefined,
     };
   } finally {
     db.close();
@@ -98,6 +106,7 @@ export async function publishSnapshot(
       const keep = new Set(needed.map((attachment) => attachment.fileKey));
       for (const key of await transaction.objectStore('serverFiles').getAllKeys())
         if (!keep.has(key)) await transaction.objectStore('serverFiles').delete(key);
+      await transaction.objectStore('serverMeta').put(snapshot.tags ?? [], 'tags');
       await transaction.objectStore('serverMeta').put(meta, 'complete');
       ensureCurrent();
       await transaction.done;

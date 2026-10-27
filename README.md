@@ -16,6 +16,7 @@ PWA для репертуара музыкантов: вход через Янд
 - один MP3-плейбэк на песню и встроенное воспроизведение;
 - поиск по названию, исполнителю и заметкам без сетевых запросов;
 - сортировка по алфавиту или дате изменения, фильтр песен с плейбэками;
+- теги с фильтрацией по любому выбранному тегу, необязательным цветом и палитрой / колор-пикером в настройках;
 - устанавливаемая PWA с offline app shell.
 
 ## Технологии
@@ -129,6 +130,15 @@ npm --prefix ../setlist-back run local:backup -- /Users/1g/Backups/setlist-local
 ```
 
 Для разработки интерфейса `.env.local` задаёт `VITE_API_BASE_URL` и `VITE_API_PROXY_TARGET` для Vite proxy `/v1`. Для туннеля и подключения iPhone по USB следуйте [TUNNEL.md](TUNNEL.md). Сервисный работник кэширует оболочку приложения, а подтверждённый снимок с файлами хранится в IndexedDB. Старые локальные тестовые песни не отправляются на сервер.
+
+Для HMR с рабочим Яндекс-входом на том же адресе `http://127.0.0.1:46544` сначала поднимите стек командой выше, затем из каталога frontend выполните:
+
+```sh
+docker compose --project-directory ../setlist-back --env-file ../setlist-back/.env.yandex.compose.local -f ../setlist-back/docker-compose.yandex.yml stop pwa
+VITE_API_BASE_URL='' VITE_API_PROXY_TARGET=http://127.0.0.1:46543 npm run dev -- --host 127.0.0.1 --port 46544 --strictPort
+```
+
+API, PostgreSQL и MinIO продолжают работать в Docker; Vite занимает только порт интерфейса. Для возврата к собранному Docker-интерфейсу остановите Vite через `Ctrl+C` и выполните `npm --prefix ../setlist-back run local:up`. Холодный офлайн-запуск проверяйте на production-сборке, поскольку HMR не кэширует всю оболочку.
 
 ## Деплой на VPS
 

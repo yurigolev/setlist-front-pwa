@@ -197,3 +197,88 @@ it('удаляет файл с ревизией песни и scoped URL', async
   expect(fetcher.mock.calls[0][0]).toBe(`${apiBaseUrl}/v1/setlists/${id}/attachments/${id}`);
   expect(fetcher.mock.calls[0][1].headers).toMatchObject({ 'If-Match': '4' });
 });
+
+it('передаёт tagIds, сохраняет отсутствие PATCH и очищает явным []', async () => {
+  const fetcher = vi.fn(async () => Response.json({ ...responseSong, tagIds: [id] }));
+  vi.stubGlobal('fetch', fetcher);
+  const created = await createSong({ title: 'Песня', artist: 'Артист', tagIds: [id] }, id, id);
+  expect(created.tagIds).toEqual([id]);
+  expect(JSON.parse(String(fetcher.mock.calls[0]![1]?.body)).tagIds).toEqual([id]);
+  await patchSong({ ...created, tagIds: undefined }, id);
+  expect(JSON.parse(String(fetcher.mock.calls[1]![1]?.body))).not.toHaveProperty('tagIds');
+  await patchSong({ ...created, tagIds: [] }, id);
+  expect(JSON.parse(String(fetcher.mock.calls[2]![1]?.body)).tagIds).toEqual([]);
+});
+it('проверяет связи тегов снимка и принимает прежний снимок без тегов', async () => {
+  const fetcher = vi.fn(async () =>
+    Response.json({
+      setlistId: id,
+      setlistRevision: 1,
+      role: 'viewer',
+      songs: [{ ...responseSong, tagIds: [id] }],
+      tags: [{ id, name: 'Акустика' }],
+    }),
+  );
+  vi.stubGlobal('fetch', fetcher);
+  expect((await fetchSnapshot(id)).tags).toEqual([{ id, name: 'Акустика' }]);
+  fetcher.mockImplementation(async () =>
+    Response.json({
+      setlistId: id,
+      setlistRevision: 1,
+      role: 'viewer',
+      songs: [{ ...responseSong, tagIds: [id] }],
+      tags: [],
+    }),
+  );
+  await expect(fetchSnapshot(id)).rejects.toThrow('связи тегов');
+  fetcher.mockImplementation(async () =>
+    Response.json({ setlistId: id, setlistRevision: 1, role: 'viewer', songs: [responseSong] }),
+  );
+  expect((await fetchSnapshot(id)).tags).toEqual([]);
+});
+it('создаёт и переименовывает scoped теги, проверяет длину и сообщает конфликт', async () => {
+  const { createTag, updateTag, deleteTag } = await import('./libraryApi');
+  const fetcher = vi.fn<(url: string, options?: RequestInit) => Promise<Response>>(async () =>
+    Response.json({ id, name: 'Новый тег' }),
+  );
+  vi.stubGlobal('fetch', fetcher);
+  await createTag('  Новый   тег ', id);
+  expect(fetcher.mock.calls[0]?.[0]).toBe(`${apiBaseUrl}/v1/setlists/${id}/tags`);
+  expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({ name: 'Новый тег' });
+  await updateTag(id, 'Название', id);
+  expect(fetcher.mock.calls[1]?.[1]?.method).toBe('PATCH');
+  await deleteTag(id, id);
+  expect(fetcher.mock.calls[2]?.[1]?.method).toBe('DELETE');
+  await expect(createTag('a'.repeat(41), id)).rejects.toThrow('40');
+  fetcher.mockImplementation(async () =>
+    Response.json(
+      { code: 'TAG_NAME_CONFLICT', message: 'Tag name already exists' },
+      { status: 409 },
+    ),
+  );
+  await expect(updateTag(id, 'Дубль', id)).rejects.toThrow('Тег с таким названием уже существует.');
+});
+it('цвет необязателен, нормализуется и может быть явно снят', async () => {
+  const { createTag, updateTag, serverTag } = await import('./libraryApi');
+  const fetcher = vi.fn<(url: string, options?: RequestInit) => Promise<Response>>(async () =>
+    Response.json({ id, name: 'Цветной', color: '#82a5ed' }),
+  );
+  vi.stubGlobal('fetch', fetcher);
+  expect((await createTag('Цветной', id, '#82a5ed')).color).toBe('#82A5ED');
+  expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({
+    name: 'Цветной',
+    color: '#82A5ED',
+  });
+  await updateTag(id, 'Цветной', id, null);
+  expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual({
+    name: 'Цветной',
+    color: null,
+  });
+  await updateTag(id, 'Другое имя', id);
+  expect(JSON.parse(String(fetcher.mock.calls[2]?.[1]?.body))).toEqual({ name: 'Другое имя' });
+  expect(serverTag({ id, name: 'Без цвета', color: null }).color).toBeNull();
+  expect(serverTag({ id, name: 'Старый' }).color).toBeUndefined();
+  expect(() => serverTag({ id, name: 'Плохой', color: 'red' })).toThrow('Некорректный тег');
+  await expect(createTag('Плохой', id, '#1234')).rejects.toThrow('#RRGGBB');
+  expect(fetcher).toHaveBeenCalledTimes(3);
+});

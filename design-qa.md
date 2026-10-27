@@ -1,3 +1,111 @@
+# Song tags — current behavior
+
+Current UI: multi-select ANY (at least one selected tag), combined with text/audio filters. All tags stay visible without tag search, collapse controls or an ANY/ALL selector. The library filter has no heading or selection count; selected tags expose Reset and a matching-song count. The song form shows its heading and selected count. Tag settings support an optional color via 12 swatches, HEX, lazily loaded ChromePicker and “Без цвета”. Saving requires a valid name and a changed name or color. Offline snapshots retain tag colors and assignments.
+
+Current code review follow-up (2026-10-26): frontend 158 tests, production build and lint passed; backend disposable QA suite and 13 setlist API scenario groups passed, along with typecheck, build, lint and migration check. OpenSpec strict validation and both repository diff checks passed. Repeat source review found no remaining actionable findings in the six reviewed issues. Browser visual checks were not rerun for this cleanup.
+
+The sections below record earlier QA runs and screenshots. Their test totals and intermediate UI descriptions are historical evidence, not verification of the current working tree. Current requirements live in `openspec/changes/song-tags/`.
+
+# Historical QA: Tag colors — 2026-10-26
+
+- `vue-color` ChromePicker styled with existing surface, border, ring, typography and rounded controls. Loaded on opening custom color; alpha disabled. Palette of 12 colors, HEX field, live chip preview, explicit “Без цвета”.
+- New tags receive a client-side suggestion from the least-used palette colors. Existing uncolored tags stay neutral. Backend stores nullable uppercase HEX and never generates colors; PATCH omission preserves color, null clears it.
+- Shared AppTag carries color through settings, selection/filter, song details and compact library rows. Selection retains tag color and adds a check mark and outline.
+- Real components verified in an isolated in-memory fixture at 390×844, 320×740 and 1280×900, with no horizontal overflow. HEX, picker click, keyboard arrows and synthetic touch events update the same preview; save closes the dialog and restores trigger focus. API mutations in the fixture stay in memory.
+- Mobile picker screenshot: `.playwright-cli/page-2026-10-26T18-52-34-043Z.png`; desktop palette: `.playwright-cli/page-2026-10-26T18-55-03-533Z.png`. The temporary fixture was removed after verification.
+- Frontend: 156 tests, lint and production build passed. Backend: 40 tests plus 13 setlist API scenario groups, typecheck, build, migration check and lint passed. Tests cover color validation, null/omitted semantics, color-only PATCH and revision behavior, copy mapping, cancellation, native HEX validity and offline snapshot persistence.
+- Additive migration `0009_tag_colors` applied to the persistent local backend; API rebuilt and healthy. Existing tags remain uncolored. Local app: http://127.0.0.1:46544/.
+
+## Historical QA: Library tag filter — 26 October 2026
+
+final result: passed
+
+Selected target: generated image exec-c60105d6-2a31-4538-b33d-0444f3bfe471.png, option 1 revised without condition selector. Scope: inline library tag block; existing header, song row spacing, typography and universal tag visuals retained as requested.
+
+Evidence: /Users/1g/.codex/visualizations/2026/10/26/01a1792c-d523-7252-a51d-54a307f5142c/tags/library-filter-comparison.png and library-filter-mobile.png. Reference normalized to 390×844 beside native 390×844 capture. Same dark theme, six tags, two selected; fixture has 3 matching songs rather than illustrative 12. Fixture renders real LibraryView, TagPicker, AppTag and layouts with in-memory data; user database untouched.
+
+Initial comparison: filter heading and outer spacing too large (P2). Reduced heading to 16px and vertical spacing to 16px/12px; recaptured and compared side by side. Final scoped comparison: compact two-row cloud, count/reset alignment, reusable icon pills, separator and results count match the intended hierarchy. Existing app fonts/colors and row padding retained. No raster assets required. Selected style uses existing AppTag tint/ring rather than adding separate library visuals. No outstanding P0/P1/P2. Browser verified multi-selection ANY (union includes both single-tag songs), count 2, result 3, reset restores all 4. Search remains hidden with six options, appears above eight. Unit tests cover search and reset. All 149 tests, build and lint passed.
+
+---
+
+# Historical QA: Track tags — shared chips follow-up
+
+Date: 2026-10-26 (Europe/Moscow).
+
+- Source visual truth: approved settings chips, `/Users/1g/.codex/visualizations/2026/10/26/01a1792c-d523-7252-a51d-54a307f5142c/tags/page-mobile-final.png`; the user's attached old checkbox form identifies the surface to update.
+- Implementation: `/Users/1g/.codex/visualizations/2026/10/26/01a1792c-d523-7252-a51d-54a307f5142c/tags/track-edit-chips.png` and `/Users/1g/.codex/visualizations/2026/10/26/01a1792c-d523-7252-a51d-54a307f5142c/tags/track-view-chips.png`, real SongFormView/SongView rendered in a temporary in-memory fixture at390 ×844 CSS/image pixels. Browser viewport override585 ×1266 compensates devicePixelRatio1.5; screenshots are not stretched.
+- Combined comparison: `/Users/1g/.codex/visualizations/2026/10/26/01a1792c-d523-7252-a51d-54a307f5142c/tags/track-tags-comparison.png`, settings style reference left, new track edit right. Full screens and the readable chip groups were inspected together. Different screen content is intentional; comparison concerns tag shape, padding, icon, selected state and typography.
+- Typography: same AppTag15px text and22px Phosphor tag icon on mobile, no separate checkbox labels.
+- Spacing/layout: same48px minimum height and10px18px inner padding; naturally wrapped rows,10px gaps. On the track view,24px separates tags from notes. Form chips are expanded; library filter remains collapsible.
+- Colors/tokens: same surface/border/ring tokens; selected chips have a ring and subtle blue surface. No ellipsis or remove icon in toggle chips.
+- Assets: existing Phosphor icons, no generated assets or approximations required.
+- Copy/content: «Теги песни», selected count, all existing tags; creation remains in settings. Search appears in the form when more than eight tags exist.
+- Browser checks: toggled Светлое on and Грустное off, saved, then verified only Лаунж and Светлое on SongView. Read-only tags have no buttons; editor chips use aria-pressed. Browser uses in-memory store mutations; user data untouched. Fixture removed after verification.
+- Regression:148 tests passed; build and lint passed. Tests cover expanded chips, multi-select/removal, disabled state, search/filter and offline viewer filtering.
+- Findings: no actionable P0/P1/P2 differences. Existing long edit-page heading wrapping predates this change and is outside tag scope.
+
+final result: passed
+
+---
+
+# Historical QA: Song tags — chips and modal QA
+
+Date: 2026-10-26 (Europe/Moscow).
+
+## Source and rendered evidence
+
+- Selected visual target: `/Users/1g/.codex/generated_images/01a1792c-d523-7252-a51d-54a307f5142c/exec-ba6056ba-83dd-43b1-82c8-f19017629b52.png`.
+- Explicit later user adjustments: smaller tag padding, no ellipsis icon; then +4px horizontal padding per side with unchanged vertical padding. Final navigation request combines members and invitations into one «Доступ» tab; owner navigation is now «Общее / Теги / Доступ».
+- Source image: 1012 × 1554 pixels, normalized proportionally to 845 × 1297 in `/Users/1g/.codex/visualizations/2026/10/26/01a1792c-d523-7252-a51d-54a307f5142c/tags/source-normalized.png`.
+- Browser CSS viewport: 845 × 1297. IAB viewport override 1268 × 1946 compensates host devicePixelRatio 1.5. Native screenshots are 845 × 1297 with no stretching. The initial low-level screenshot had a 70px bottom crop; it was compared using a matching crop, never stretched in the final evidence.
+- Final screenshot: `/Users/1g/.codex/visualizations/2026/10/26/01a1792c-d523-7252-a51d-54a307f5142c/tags/dialog-final-compact.png`.
+- Full comparison, source left / implementation right: `/Users/1g/.codex/visualizations/2026/10/26/01a1792c-d523-7252-a51d-54a307f5142c/tags/comparison-final-compact.png`.
+- Focused comparison of modal typography, field and footer: `/Users/1g/.codex/visualizations/2026/10/26/01a1792c-d523-7252-a51d-54a307f5142c/tags/comparison-dialog-focus.png`.
+- Page without forms: `/Users/1g/.codex/visualizations/2026/10/26/01a1792c-d523-7252-a51d-54a307f5142c/tags/page-desktop-final.png`.
+- Mobile 390 × 844 CSS/image pixels: `/Users/1g/.codex/visualizations/2026/10/26/01a1792c-d523-7252-a51d-54a307f5142c/tags/page-mobile-final.png`; modal state before the last horizontal-only padding change: `/Users/1g/.codex/visualizations/2026/10/26/01a1792c-d523-7252-a51d-54a307f5142c/tags/dialog-mobile.png`.
+- Actual application components rendered with the app layout and all three production stylesheets in a temporary local fixture. Store mutations were replaced with in-memory test data; no user songs or tags were modified. The fixture was removed after verification. The production dev URL remains http://127.0.0.1:46544/.
+
+## Findings and comparison history
+
+- [P2, fixed] Initial chips were too small and arranged differently from the selected target; increased headings and adjusted grouping before recapture. Later user explicitly preferred compact natural wrapping, smaller inner spacing and no ellipsis; final geometry follows that direction.
+- [P2, fixed] Initial modal typography was too small and its vertical position differed from the target. Adjusted heading, description, footer controls and modal position; the full and focused final comparisons verify the correction.
+- [P2, fixed] Broad song-row span selectors could override the reusable tag internals. Limited artist-text styling to direct children and used AppTag in every tag surface.
+- No actionable P0/P1/P2 findings remain. Existing app shell is intentionally retained.
+
+## Required fidelity surfaces
+
+- **Typography:** system sans retained, tag names 16px/15px; modal title 30px/23px and readable 16px/14px description. Existing app-shell metrics retained. Minor raster-font and icon weight differences are P3.
+- **Spacing/layout:** modal 584px maximum, mobile width358px at viewport390 with 16px edges; no horizontal overflow. Desktop chips remain56px high (12px 22px padding), mobile48px (10px 18px). Horizontal padding reflects the user's final +4px adjustment; editing controls exist only inside the dialog.
+- **Colors/tokens:** existing #1b1c27 base, surface/foreground/primary/ring variables, quiet red deletion and dimmed modal overlay. Generated raster grain/gradient is not reproduced as product UI.
+- **Image/asset fidelity:** no custom raster assets are required. Phosphor tag/plus/trash/close icons are reused from the app's library. Ellipsis intentionally removed per user. No homemade icon artwork.
+- **Copy/content:** Russian headings and labels match selected direction. Save is intentionally disabled until name changes; focused input ring and selected text are real accessibility state absent from the mock. Length guidance is accessible but visually hidden.
+
+## Interaction and regression checks
+
+- Browser: existing tag opens modal and focuses/selects its name; rename updates the chip and returns focus to its trigger.
+- Browser: add opens a modal; duplicate-name error keeps the form and text; corrected name saves successfully.
+- Browser: delete enters a second modal state with affected-song count; confirming removes only the tag and returns focus to Add when its trigger is gone.
+- Browser: desktop and mobile modals, no page inputs; mobile content width390 equals viewport390, dialog stays within screen. Escape/outside closing and focus behavior use Reka primitives; close and outside actions are blocked during pending mutation.
+- Tests:146 passed, including reusable static tag semantics, disabled action, modal rename/error/retry/delete/scope changes, and existing filters/cache/API regressions. Build and lint passed.
+- Browser: final owner navigation has three tabs; «Доступ» shows participant list and invitations together. Final targeted regression checks:8 passed; rebuilt and lint passed after merging tabs.
+- Browser console error entries: none in the final fixture.
+
+## Follow-up Polish
+
+- P3: system-font metrics, quiet delete-link size and retained navigation shell differ slightly from the generated image. No clipping or unusable controls.
+
+## Implementation Checklist
+
+- [x] Universal store-independent AppTag for static, editable and removable tags.
+- [x] Reuse in settings, picker, library and song detail without nested buttons.
+- [x] Modal-only CRUD with confirmation and error/loading states.
+- [x] Compact padding, no ellipsis, unchanged heights after horizontal adjustment.
+- [x] Compare full and focused browser-rendered evidence; verify mobile and primary actions.
+
+final result: passed
+
+---
+
 # Setlivo login — selected concept QA
 
 Date: 2026-10-23 (Europe/Moscow).

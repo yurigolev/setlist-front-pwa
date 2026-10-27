@@ -1,3 +1,9 @@
+export interface SongTag {
+  id: string;
+  name: string;
+  color?: string | null;
+}
+
 export type AttachmentKind = 'image' | 'audio';
 
 export interface Attachment {
@@ -20,6 +26,7 @@ export interface Song {
   title: string;
   artist?: string;
   content?: string;
+  tagIds?: string[];
   attachments: Attachment[];
   createdAt: string;
   updatedAt: string;
@@ -27,6 +34,7 @@ export interface Song {
 }
 
 export interface NewSong {
+  tagIds?: string[];
   title: string;
   artist?: string;
   content?: string;

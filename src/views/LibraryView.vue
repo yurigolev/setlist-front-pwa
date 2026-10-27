@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import AppTag from '@/components/ui/AppTag.vue';
+import TagPicker from '@/components/TagPicker.vue';
 import PageHeader from '@/components/PageHeader.vue';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   PhArrowsClockwise,
@@ -13,7 +15,7 @@ import {
   PhWaveform,
 } from '@phosphor-icons/vue';
 import { formatSyncTime } from '@/services/syncTime';
-import { searchSongs } from '@/services/songSearch';
+import { searchSongs, filterSongsByTags } from '@/services/songSearch';
 import type { Song } from '@/domain/song';
 import { useSongsStore } from '@/stores/songs';
 import { useSetlistsStore } from '@/stores/setlists';
@@ -26,6 +28,24 @@ const songsStore = useSongsStore();
 const setlists = useSetlistsStore();
 const router = useRouter();
 const query = ref('');
+const tagIds = ref<string[]>([]);
+watch(
+  () => setlists.selectedId,
+  () => {
+    tagIds.value = [];
+    query.value = '';
+    playbackOnly.value = false;
+  },
+);
+watch(
+  () => songsStore.tags,
+  (tags) => {
+    tagIds.value = tagIds.value.filter((id) => tags.some((tag) => tag.id === id));
+  },
+);
+function songTags(song: Song) {
+  return songsStore.tags.filter((tag) => song.tagIds?.includes(tag.id));
+}
 const sortMode = ref<SortMode>('alphabetical');
 const playbackOnly = ref(false);
 const refreshing = ref(false);
@@ -48,9 +68,10 @@ async function refresh(): Promise<void> {
 }
 
 const visibleSongs = computed(() => {
-  const matches = searchSongs(songsStore.songs, query.value).filter(
-    (song) => !playbackOnly.value || hasAudio(song),
-  );
+  const matches = filterSongsByTags(
+    searchSongs(songsStore.songs, query.value),
+    tagIds.value,
+  ).filter((song) => !playbackOnly.value || hasAudio(song));
   return [...matches].sort((left, right) =>
     sortMode.value === 'alphabetical'
       ? left.title.localeCompare(right.title, 'ru')
@@ -163,6 +184,10 @@ onMounted(() => songsStore.load());
         </button>
       </div>
 
+      <TagPicker v-if="songsStore.tags.length" v-model="tagIds" label="Теги" filter />
+      <p v-if="tagIds.length && !songsStore.isLoading" class="library-results" role="status">
+        Найдено песен: {{ visibleSongs.length }}
+      </p>
       <p v-if="songsStore.isLoading" class="library-message">Загружаем песни…</p>
       <template v-else-if="songsStore.songs.length">
         <p v-if="!visibleSongs.length" class="library-message">
@@ -171,10 +196,26 @@ onMounted(() => songsStore.load());
         <ul v-else class="song-rows" aria-label="Песни">
           <li v-for="song in visibleSongs" :key="song.id">
             <button class="song-row" type="button" @click="openSong(song)">
-              <span class="song-row__copy"
-                ><strong>{{ song.title }}</strong
-                ><span>{{ song.artist || 'Исполнитель не указан' }}</span></span
-              >
+              <span class="song-row__copy">
+                <strong>{{ song.title }}</strong>
+                <span>{{ song.artist || 'Исполнитель не указан' }}</span>
+                <span v-if="songTags(song).length" class="tag-chips song-row__tags">
+                  <AppTag
+                    v-for="tag in songTags(song).slice(0, 3)"
+                    :key="tag.id"
+                    :label="tag.name"
+                    :color="tag.color"
+                    size="xs"
+                    :icon="false"
+                  />
+                  <AppTag
+                    v-if="songTags(song).length > 3"
+                    :label="`+${songTags(song).length - 3}`"
+                    size="xs"
+                    :icon="false"
+                  />
+                </span>
+              </span>
               <span class="song-row__meta">
                 <PhFileText
                   v-if="song.content"
@@ -209,3 +250,11 @@ onMounted(() => songsStore.load());
     </div>
   </main>
 </template>
+
+<style scoped>
+.library-results {
+  margin: 12px 0 0;
+  color: var(--muted-strong);
+  font-size: 14px;
+}
+</style>
